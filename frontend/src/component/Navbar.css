@@ -126,8 +126,8 @@
 /* Settings Panel Styles */
 .settings-panel {
     position: absolute;
-    top: 150%;
-    right: 0;
+    top: calc(100% + 2rem);
+    right: -1rem;
     background: rgba(15, 23, 42, 0.95);
     border: 1px solid var(--fire-orange);
     padding: 1.5rem;

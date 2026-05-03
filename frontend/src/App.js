@@ -54,7 +54,9 @@ function App() {
   const handleMouseMove = (e) => {
     if (isDragging && blobSettings.isDraggable) {
       const x = (e.clientX / window.innerWidth) * 100;
-      const y = (e.clientY / window.innerHeight) * 100;
+      const rawY = (e.clientY / window.innerHeight) * 100;
+      // Prevent blob from being dragged too high into the navbar area
+      const y = Math.max(15, rawY); 
       setBlobSettings(prev => ({ ...prev, position: { x, y } }));
     }
   };
