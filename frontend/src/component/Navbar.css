@@ -1,0 +1,122 @@
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 4rem;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-bottom: 1px solid rgba(255, 107, 0, 0.2);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    font-family: var(--futuristic);
+}
+
+.nav-logo {
+    font-size: 1.8rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #ffcc00, #ff6b00, #ff2d00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 15px rgba(255, 107, 0, 0.3);
+    cursor: pointer;
+    text-transform: uppercase;
+}
+
+.nav-links {
+    display: flex;
+    gap: 3rem;
+    list-style: none;
+}
+
+.nav-item {
+    position: relative;
+}
+
+.nav-link {
+    color: #f8fafc;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    transition: all 0.3s ease;
+    padding: 0.5rem 0;
+}
+
+.nav-link:hover {
+    color: var(--fire-orange);
+    text-shadow: 0 0 8px var(--fire-glow);
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--fire-gradient);
+    box-shadow: 0 0 10px var(--fire-orange);
+    transition: width 0.3s ease;
+}
+
+.nav-link:hover::after {
+    width: 100%;
+}
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.btn-launch {
+    padding: 0.6rem 1.5rem;
+    background: transparent;
+    border: 1px solid var(--fire-orange);
+    color: var(--fire-orange);
+    font-family: var(--futuristic);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-radius: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-launch:hover {
+    background: var(--fire-gradient);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255, 45, 0, 0.5);
+    border-color: transparent;
+    transform: translateY(-2px);
+}
+
+/* Futuristic Energy Pulse Animation */
+@keyframes energyPulse {
+    0% { box-shadow: 0 0 5px var(--fire-glow); }
+    50% { box-shadow: 0 0 20px var(--fire-orange); }
+    100% { box-shadow: 0 0 5px var(--fire-glow); }
+}
+
+.active .nav-link {
+    color: var(--fire-yellow);
+    text-shadow: 0 0 10px var(--fire-yellow);
+}
+
+@media (max-width: 768px) {
+    .navbar {
+        padding: 1rem 2rem;
+    }
+    
+    .nav-links {
+        display: none; /* Mobile menu logic can be added later */
+    }
+}
