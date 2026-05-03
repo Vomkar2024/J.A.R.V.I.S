@@ -6,9 +6,6 @@
   justify-content: center;
   position: relative;
   padding: 2rem;
-  background-image: url('https://storage.googleapis.com/aida-data-bucket/multi_modal_routing/multi_image_prompts/c2_9_1.jpg');
-  background-size: cover;
-  background-position: center bottom;
 }
 
 .hero-section {
@@ -123,7 +120,7 @@
 }
 
 .blob-wrapper {
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(1.2);
