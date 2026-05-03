@@ -54,9 +54,10 @@ const SHADERS = {
             map(cnoise(vec2(-0.3 * time + uv.x * 5., uv.y * 5.)), 0., 1., -2., 25.)
         );
 
-        newPos.z += noise.x * .06 * noise.y;
+        newPos.z += noise.x * .06 * noise.y * (1.0 + intensity);
         vZ = newPos.z;
         vec4 mvPosition = modelViewMatrix * vec4( newPos, 1.0 );
+
         gl_PointSize = 10.0;
         gl_Position = projectionMatrix * mvPosition;
     }
@@ -66,35 +67,38 @@ const SHADERS = {
     varying float vTime;
     varying float vZ;
     uniform sampler2D uTexture;
+    uniform vec3 uColor;
 
     float map(float value, float oldMin, float oldMax, float newMin, float newMax) {
         return newMin + (newMax - newMin) * (value - oldMin) / (oldMax - oldMin);
     }
 
     void main() {
-        vec3 colorA = vec3(.6, 0.17, 0.17);
-        vec3 colorB = vec3(0.17, 0.8, .7); 
         float alpha = map(vZ / 2., -1. / 2., 30. / 2., 0.17, 1.); 
-        vec3 color = vec3(.5, .5, .6);
-
-        gl_FragColor = vec4(color, alpha) * texture2D(uTexture, gl_PointCoord);
+        gl_FragColor = vec4(uColor, alpha) * texture2D(uTexture, gl_PointCoord);
     }
   `
 };
 
-const ParticleScene = () => {
+const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange }) => {
+
   const containerRef = useRef(null);
   const requestRef = useRef();
+  const materialRef = useRef();
+  const particlesRef = useRef();
+  const sensitivityRef = useRef(sensitivity);
+  const colorRef = useRef(color);
+
 
   useEffect(() => {
     const node = containerRef.current;
-    // Scene Setup
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    // Scene Setup - Use a fixed size for the blob container
+    const width = 800;
+    const height = 800;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
-    camera.position.set(0, -70, 200);
+    camera.position.set(0, 0, 220); // More centered camera position
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -115,26 +119,25 @@ const ParticleScene = () => {
         mouse: { value: 0.0 },
         intensity: { value: 0.0 },
         uTexture: { value: sparkTexture },
+        uColor: { value: new THREE.Color(color) },
         resolution: { value: new THREE.Vector2(width, height) }
       },
       vertexShader: SHADERS.vertex,
       fragmentShader: SHADERS.fragment,
       blending: THREE.AdditiveBlending,
       transparent: true,
-      depthWrite: false, // Prevents square artifacts in additive blending
+      depthWrite: false,
     });
+    materialRef.current = material;
 
     const particles = new THREE.Points(geometry, material);
+    particlesRef.current = particles;
     particles.position.y = 0;
     scene.add(particles);
 
-    // Resize Handler
+    // Resize Handler - No longer needed for fixed size but kept for consistency
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      renderer.setSize(w, h);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      // renderer.setSize(width, height);
     };
 
     window.addEventListener('resize', handleResize);
@@ -144,6 +147,7 @@ const ParticleScene = () => {
     let mouseY = 0;
     let targetIntensity = 0;
     let currentIntensity = 0;
+    const targetColorObj = new THREE.Color(colorRef.current);
 
     const onMouseMove = (event) => {
       mouseX = (event.clientX / window.innerWidth) * 2 - 1;
@@ -156,15 +160,23 @@ const ParticleScene = () => {
     // Animation Loop
     let time = 0;
     const animate = () => {
-      time += 0.03;
+      time += 0.02; // Slightly slower base motion
 
-      // Smoothly interpolate intensity
-      currentIntensity += (targetIntensity - currentIntensity) * 0.05;
-      targetIntensity *= 0.98; // Decay back to idle
+      // Smoothly interpolate intensity with sensitivity
+      currentIntensity += (targetIntensity - currentIntensity) * (0.02 * (sensitivityRef.current || 1.0));
+      targetIntensity *= 0.99; // Slower decay for smoother transitions
 
-      material.uniforms.time.value = time;
-      material.uniforms.mouse.value = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
-      material.uniforms.intensity.value = currentIntensity;
+
+      if (materialRef.current) {
+        materialRef.current.uniforms.time.value = time;
+        materialRef.current.uniforms.mouse.value = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
+        materialRef.current.uniforms.intensity.value = currentIntensity;
+        
+        // Smooth color transition
+        targetColorObj.set(colorRef.current);
+        materialRef.current.uniforms.uColor.value.lerp(targetColorObj, 0.05);
+      }
+
 
       renderer.render(scene, camera);
       requestRef.current = requestAnimationFrame(animate);
@@ -183,14 +195,25 @@ const ParticleScene = () => {
       geometry.dispose();
       material.dispose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+
+  useEffect(() => {
+    sensitivityRef.current = sensitivity;
+  }, [sensitivity]);
+
+  useEffect(() => {
+    colorRef.current = color;
+  }, [color]);
 
   return (
     <div
       ref={containerRef}
       style={{
-        width: '100vw',
-        height: '100vh',
+        width: '800px',
+        height: '800px',
+        margin: '0 auto', // Center inside its wrapper
         overflow: 'hidden',
         background: 'transparent'
       }}
