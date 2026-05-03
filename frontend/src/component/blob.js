@@ -15,6 +15,7 @@ const SHADERS = {
     vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
     vec2 fade(vec2 t) { return t*t*t*(t*(t*6.0-15.0)+10.0); }
 
+    // Classic Perlin noise
     float cnoise(vec2 P) {
       vec4 Pi = floor(P.xyxy) + vec4(0.0, 0.0, 1.0, 1.0);
       vec4 Pf = fract(P.xyxy) - vec4(0.0, 0.0, 1.0, 1.0);
@@ -48,8 +49,12 @@ const SHADERS = {
         vTime = time;
         vec3 newPos = position;
         vec2 peak = vec2(1.0 - abs(.5 - uv.x), 1.0 - abs(.5 - uv.y));
-        float dynamicNoise = map(cnoise(vec2(0.3 * time + uv.x * (5.0 + mouse * 2.0), uv.y * 5.0)), 0., 1., -2., (peak.x * peak.y * (30.0 + intensity * 20.0)));
-        newPos.z += dynamicNoise * .06 * (1.0 + intensity);
+        vec2 noise = vec2(
+            map(cnoise(vec2(0.3 * time + uv.x * 5., uv.y * 5.)), 0., 1., -2., (peak.x * peak.y * 30.)),
+            map(cnoise(vec2(-0.3 * time + uv.x * 5., uv.y * 5.)), 0., 1., -2., 25.)
+        );
+
+        newPos.z += noise.x * .06 * noise.y;
         vZ = newPos.z;
         vec4 mvPosition = modelViewMatrix * vec4( newPos, 1.0 );
         gl_PointSize = 10.0;
@@ -67,8 +72,11 @@ const SHADERS = {
     }
 
     void main() {
-        float alpha = map(vZ / 2., -0.5, 15.0, 0.17, 1.); 
+        vec3 colorA = vec3(.6, 0.17, 0.17);
+        vec3 colorB = vec3(0.17, 0.8, .7); 
+        float alpha = map(vZ / 2., -1. / 2., 30. / 2., 0.17, 1.); 
         vec3 color = vec3(.5, .5, .6);
+
         gl_FragColor = vec4(color, alpha) * texture2D(uTexture, gl_PointCoord);
     }
   `
