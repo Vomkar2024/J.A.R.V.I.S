@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 const SHADERS = {
-    vertex: `
+  vertex: `
     varying vec3 vUv;
     varying float vTime;
     varying float vZ;
@@ -56,7 +56,7 @@ const SHADERS = {
         gl_Position = projectionMatrix * mvPosition;
     }
   `,
-    fragment: `
+  fragment: `
     varying vec3 vUv;
     varying float vTime;
     varying float vZ;
@@ -75,118 +75,119 @@ const SHADERS = {
 };
 
 const ParticleScene = () => {
-    const containerRef = useRef(null);
-    const requestRef = useRef();
+  const containerRef = useRef(null);
+  const requestRef = useRef();
 
-    useEffect(() => {
-        const node = containerRef.current;
-        // Scene Setup
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+  useEffect(() => {
+    const node = containerRef.current;
+    // Scene Setup
+    const width = window.innerWidth;
+    const height = window.innerHeight;
 
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
-        camera.position.set(0, 0, 200);
-        camera.lookAt(0, 0, 0);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
+    camera.position.set(0, 0, 200);
+    camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(width, height);
-        if (node) {
-            node.appendChild(renderer.domElement);
-        }
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(width, height);
+    if (node) {
+      node.appendChild(renderer.domElement);
+    }
 
-        // Particles
-        const geometry = new THREE.SphereGeometry(30, 102, 52);
-        const textureLoader = new THREE.TextureLoader();
-        const sparkTexture = textureLoader.load("https://s3-us-west-2.amazonaws.com/s.cdpn.io/1081752/spark1.png");
+    // Particles
+    const geometry = new THREE.SphereGeometry(22, 102, 52);
+    const textureLoader = new THREE.TextureLoader();
+    const sparkTexture = textureLoader.load("https://s3-us-west-2.amazonaws.com/s.cdpn.io/1081752/spark1.png");
 
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 1.0 },
-                mouse: { value: 0.0 },
-                intensity: { value: 0.0 },
-                uTexture: { value: sparkTexture },
-                resolution: { value: new THREE.Vector2(width, height) }
-            },
-            vertexShader: SHADERS.vertex,
-            fragmentShader: SHADERS.fragment,
-            blending: THREE.AdditiveBlending,
-            transparent: true,
-            depthWrite: false, // Prevents square artifacts in additive blending
-        });
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 1.0 },
+        mouse: { value: 0.0 },
+        intensity: { value: 0.0 },
+        uTexture: { value: sparkTexture },
+        resolution: { value: new THREE.Vector2(width, height) }
+      },
+      vertexShader: SHADERS.vertex,
+      fragmentShader: SHADERS.fragment,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false, // Prevents square artifacts in additive blending
+    });
 
-        const particles = new THREE.Points(geometry, material);
-        scene.add(particles);
+    const particles = new THREE.Points(geometry, material);
+    particles.position.y = 2.5;
+    scene.add(particles);
 
-        // Resize Handler
-        const handleResize = () => {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            renderer.setSize(w, h);
-            camera.aspect = w / h;
-            camera.updateProjectionMatrix();
-        };
+    // Resize Handler
+    const handleResize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
 
-        window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize);
 
-        // Mouse Tracking
-        let mouseX = 0;
-        let mouseY = 0;
-        let targetIntensity = 0;
-        let currentIntensity = 0;
+    // Mouse Tracking
+    let mouseX = 0;
+    let mouseY = 0;
+    let targetIntensity = 0;
+    let currentIntensity = 0;
 
-        const onMouseMove = (event) => {
-            mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-            mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
-            targetIntensity = 1.0;
-        };
+    const onMouseMove = (event) => {
+      mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+      mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+      targetIntensity = 1.0;
+    };
 
-        window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mousemove', onMouseMove);
 
-        // Animation Loop
-        let time = 0;
-        const animate = () => {
-            time += 0.03;
-            
-            // Smoothly interpolate intensity
-            currentIntensity += (targetIntensity - currentIntensity) * 0.05;
-            targetIntensity *= 0.98; // Decay back to idle
+    // Animation Loop
+    let time = 0;
+    const animate = () => {
+      time += 0.03;
 
-            material.uniforms.time.value = time;
-            material.uniforms.mouse.value = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
-            material.uniforms.intensity.value = currentIntensity;
+      // Smoothly interpolate intensity
+      currentIntensity += (targetIntensity - currentIntensity) * 0.05;
+      targetIntensity *= 0.98; // Decay back to idle
 
-            renderer.render(scene, camera);
-            requestRef.current = requestAnimationFrame(animate);
-        };
+      material.uniforms.time.value = time;
+      material.uniforms.mouse.value = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
+      material.uniforms.intensity.value = currentIntensity;
 
-        requestRef.current = requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+      requestRef.current = requestAnimationFrame(animate);
+    };
 
-        // Cleanup
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            window.removeEventListener('mousemove', onMouseMove);
-            cancelAnimationFrame(requestRef.current);
-            if (node) {
-                node.removeChild(renderer.domElement);
-            }
-            geometry.dispose();
-            material.dispose();
-        };
-    }, []);
+    requestRef.current = requestAnimationFrame(animate);
 
-    return (
-        <div
-            ref={containerRef}
-            style={{
-                width: '100vw',
-                height: '100vh',
-                overflow: 'hidden',
-                background: 'transparent'
-            }}
-        />
-    );
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousemove', onMouseMove);
+      cancelAnimationFrame(requestRef.current);
+      if (node) {
+        node.removeChild(renderer.domElement);
+      }
+      geometry.dispose();
+      material.dispose();
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        background: 'transparent'
+      }}
+    />
+  );
 };
 
 export default ParticleScene;
