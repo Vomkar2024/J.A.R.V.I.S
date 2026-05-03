@@ -1,0 +1,129 @@
+.splash-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  overflow: hidden;
+  transition: opacity 0.8s ease-in-out, visibility 0.8s;
+}
+
+.splash-overlay.fade-out {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.splash-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: 500px;
+  padding: 3rem;
+}
+
+.jarvis-logo {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.splash-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 4rem;
+  font-weight: 900;
+  letter-spacing: 12px;
+  color: #fff;
+  margin: 0;
+  text-shadow: 0 0 20px rgba(255, 107, 0, 0.6);
+  animation: logoPulse 2s infinite ease-in-out;
+}
+
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 107, 0, 0.8);
+  box-shadow: 0 0 15px var(--fire-orange);
+  animation: scan 2s infinite linear;
+}
+
+.loading-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loading-bar {
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: var(--fire-gradient);
+  box-shadow: 0 0 10px var(--fire-orange);
+  animation: loadingProgress 2.5s infinite ease-in-out;
+}
+
+.loading-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 4px;
+  color: var(--fire-yellow);
+  opacity: 0.7;
+  animation: textFlash 1.5s infinite alternate;
+}
+
+.hud-decorations .corner {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--fire-orange);
+  opacity: 0.5;
+}
+
+.top-left { top: 0; left: 0; border-right: none; border-bottom: none; }
+.top-right { top: 0; right: 0; border-left: none; border-bottom: none; }
+.bottom-left { bottom: 0; left: 0; border-right: none; border-top: none; }
+.bottom-right { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.05); filter: brightness(1.3); }
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes loadingProgress {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes textFlash {
+  from { opacity: 0.3; }
+  to { opacity: 0.8; }
+}

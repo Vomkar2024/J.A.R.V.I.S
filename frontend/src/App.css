@@ -7,6 +7,12 @@
   position: relative;
   padding: 2rem;
   overflow: hidden;
+  transition: opacity 1s ease-in-out, visibility 1s;
+}
+
+.app-container.hidden {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .main-content {
