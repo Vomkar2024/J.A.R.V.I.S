@@ -86,7 +86,7 @@ const ParticleScene = () => {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
-    camera.position.set(0, 0, 200);
+    camera.position.set(0, -70, 200);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -117,7 +117,7 @@ const ParticleScene = () => {
     });
 
     const particles = new THREE.Points(geometry, material);
-    particles.position.y = 2.5;
+    particles.position.y = 0;
     scene.add(particles);
 
     // Resize Handler
