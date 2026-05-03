@@ -10,9 +10,10 @@
   transition: opacity 1s ease-in-out, visibility 1s;
 }
 
-.app-container.hidden {
+.hidden {
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
 }
 
 .main-content {
@@ -71,7 +72,7 @@
   z-index: 0;
   pointer-events: auto;
   filter: drop-shadow(0 0 50px var(--fire-glow));
-  transition: filter 0.5s ease;
+  transition: filter 0.5s ease, opacity 1.5s ease, visibility 1.5s ease;
 }
 
 .blob-wrapper:hover {
@@ -86,6 +87,13 @@
   padding: 2rem;
   border-radius: 20px;
   display: inline-block;
+  transition: opacity 1.5s ease-in-out, visibility 1.5s, transform 1.5s ease-in-out;
+}
+
+.glass-panel.fade-out-hero {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-20px);
 }
 
 @keyframes fadeIn {

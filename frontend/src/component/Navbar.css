@@ -13,6 +13,7 @@
     right: 0;
     z-index: 1000;
     font-family: var(--futuristic);
+    transition: opacity 1.5s ease, visibility 1.5s ease;
 }
 
 .nav-logo {

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import './Navbar.css';
 
-const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset }) => {
+const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) => {
   const [showSettings, setShowSettings] = useState(false);
 
   const toggleSettings = useCallback(() => {
@@ -13,7 +13,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset }) => {
   }, [setBlobSettings]);
 
   return (
-    <nav className="navbar">
+    <nav className={`navbar ${showHero ? 'hidden' : ''}`}>
       <div className="nav-logo">
         J.A.R.V.I.S
       </div>

@@ -17,6 +17,7 @@ function App() {
   const [blobSettings, setBlobSettings] = useState(DEFAULT_SETTINGS);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showHero, setShowHero] = useState(true);
 
   useEffect(() => {
     try {
@@ -31,9 +32,17 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to load blob settings from localStorage:', error);
-      // Fallback to default settings already in state
     }
   }, []);
+
+  useEffect(() => {
+    if (!isLoading) {
+      const timer = setTimeout(() => {
+        setShowHero(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
 
   const handleSave = useCallback(() => {
     try {
@@ -93,11 +102,12 @@ function App() {
           setBlobSettings={setBlobSettings}
           onSave={handleSave}
           onReset={handleReset}
+          showHero={showHero}
         />
         
         <main className="main-content">
           <section className="hero-section">
-            <div className="glass-panel">
+            <div className={`glass-panel ${!showHero ? 'fade-out-hero' : ''}`}>
               <h1 className="hero-title">J.A.R.V.I.S</h1>
               <p className="hero-subtitle">Just A Rather Very Intelligent System</p>
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -110,7 +120,7 @@ function App() {
         </main>
 
         <div
-          className="blob-wrapper"
+          className={`blob-wrapper ${showHero ? 'hidden' : ''}`}
           onMouseDown={handleMouseDown}
           style={{
             left: `${blobSettings.position.x}%`,

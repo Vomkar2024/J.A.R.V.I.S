@@ -25,8 +25,8 @@
   align-items: center;
   gap: 2rem;
   width: 100%;
-  max-width: 500px;
-  padding: 3rem;
+  max-width: 800px;
+  padding: 4rem;
 }
 
 .jarvis-logo {
@@ -101,10 +101,10 @@
   opacity: 0.5;
 }
 
-.top-left { top: 0; left: 0; border-right: none; border-bottom: none; }
-.top-right { top: 0; right: 0; border-left: none; border-bottom: none; }
-.bottom-left { bottom: 0; left: 0; border-right: none; border-top: none; }
-.bottom-right { bottom: 0; right: 0; border-left: none; border-top: none; }
+.top-left { top: -20px; left: -20px; border-right: none; border-bottom: none; }
+.top-right { top: -20px; right: -20px; border-left: none; border-bottom: none; }
+.bottom-left { bottom: -20px; left: -20px; border-right: none; border-top: none; }
+.bottom-right { bottom: -20px; right: -20px; border-left: none; border-top: none; }
 
 @keyframes logoPulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }
