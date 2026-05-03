@@ -29,6 +29,13 @@
     text-transform: uppercase;
 }
 
+.settings-trigger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
 .nav-links {
     display: flex;
     gap: 3rem;
@@ -196,5 +203,33 @@
 .btn-save:hover {
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(255, 45, 0, 0.4);
+}
+
+.settings-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.settings-actions button {
+    flex: 1;
+}
+
+.btn-reset {
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+
+.btn-reset:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
 }
 

@@ -80,35 +80,30 @@ const SHADERS = {
   `
 };
 
-const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange }) => {
-
+const FireAIBlob = ({ color, sensitivity }) => {
   const containerRef = useRef(null);
   const requestRef = useRef();
   const materialRef = useRef();
-  const particlesRef = useRef();
   const sensitivityRef = useRef(sensitivity);
   const colorRef = useRef(color);
 
-
   useEffect(() => {
     const node = containerRef.current;
-    // Scene Setup - Use a fixed size for the blob container
+    if (!node) return;
+
     const width = 800;
     const height = 800;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
-    camera.position.set(0, 0, 220); // More centered camera position
+    camera.position.set(0, 0, 220);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(width, height);
-    if (node) {
-      node.appendChild(renderer.domElement);
-    }
+    node.appendChild(renderer.domElement);
 
-    // Particles
     const geometry = new THREE.SphereGeometry(22, 102, 52);
     const textureLoader = new THREE.TextureLoader();
     const sparkTexture = textureLoader.load("https://s3-us-west-2.amazonaws.com/s.cdpn.io/1081752/spark1.png");
@@ -131,18 +126,8 @@ const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange
     materialRef.current = material;
 
     const particles = new THREE.Points(geometry, material);
-    particlesRef.current = particles;
-    particles.position.y = 0;
     scene.add(particles);
 
-    // Resize Handler - No longer needed for fixed size but kept for consistency
-    const handleResize = () => {
-      // renderer.setSize(width, height);
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    // Mouse Tracking
     let mouseX = 0;
     let mouseY = 0;
     let targetIntensity = 0;
@@ -157,26 +142,22 @@ const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange
 
     window.addEventListener('mousemove', onMouseMove);
 
-    // Animation Loop
     let time = 0;
     const animate = () => {
-      time += 0.02; // Slightly slower base motion
+      time += 0.02;
 
       // Smoothly interpolate intensity with sensitivity
       currentIntensity += (targetIntensity - currentIntensity) * (0.02 * (sensitivityRef.current || 1.0));
-      targetIntensity *= 0.99; // Slower decay for smoother transitions
-
+      targetIntensity *= 0.99;
 
       if (materialRef.current) {
         materialRef.current.uniforms.time.value = time;
         materialRef.current.uniforms.mouse.value = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
         materialRef.current.uniforms.intensity.value = currentIntensity;
         
-        // Smooth color transition
         targetColorObj.set(colorRef.current);
         materialRef.current.uniforms.uColor.value.lerp(targetColorObj, 0.05);
       }
-
 
       renderer.render(scene, camera);
       requestRef.current = requestAnimationFrame(animate);
@@ -184,20 +165,18 @@ const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange
 
     requestRef.current = requestAnimationFrame(animate);
 
-    // Cleanup
     return () => {
-      window.removeEventListener('resize', handleResize);
       window.removeEventListener('mousemove', onMouseMove);
       cancelAnimationFrame(requestRef.current);
-      if (node) {
+      if (node && renderer.domElement) {
         node.removeChild(renderer.domElement);
       }
       geometry.dispose();
       material.dispose();
+      renderer.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
 
   useEffect(() => {
     sensitivityRef.current = sensitivity;
@@ -210,10 +189,11 @@ const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange
   return (
     <div
       ref={containerRef}
+      className="blob-container-inner"
       style={{
         width: '800px',
         height: '800px',
-        margin: '0 auto', // Center inside its wrapper
+        margin: '0 auto',
         overflow: 'hidden',
         background: 'transparent'
       }}
@@ -221,4 +201,4 @@ const ParticleScene = ({ color, size, sensitivity, isDraggable, onPositionChange
   );
 };
 
-export default ParticleScene;
+export default FireAIBlob;

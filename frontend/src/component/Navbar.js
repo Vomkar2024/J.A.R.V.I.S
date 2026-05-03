@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import './Navbar.css';
 
 const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset }) => {
   const [showSettings, setShowSettings] = useState(false);
+
+  const toggleSettings = useCallback(() => {
+    setShowSettings(prev => !prev);
+  }, []);
+
+  const updateSetting = useCallback((key, value) => {
+    setBlobSettings(prev => ({ ...prev, [key]: value }));
+  }, [setBlobSettings]);
 
   return (
     <nav className="navbar">
@@ -23,8 +31,8 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset }) => {
         <li className="nav-item">
           <button 
             className="nav-link settings-trigger" 
-            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            onClick={() => setShowSettings(!showSettings)}
+            onClick={toggleSettings}
+            aria-expanded={showSettings}
           >
             Settings
           </button>
@@ -34,55 +42,57 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset }) => {
               <h3 className="settings-title">Blob Customization</h3>
               
               <div className="settings-group">
-                <label>Color</label>
+                <label htmlFor="color-picker">Color</label>
                 <input 
+                  id="color-picker"
                   type="color" 
                   value={blobSettings.color} 
-                  onChange={(e) => setBlobSettings({...blobSettings, color: e.target.value})}
+                  onChange={(e) => updateSetting('color', e.target.value)}
                 />
               </div>
 
               <div className="settings-group">
-                <label>Size</label>
+                <label htmlFor="size-range">Size</label>
                 <input 
+                  id="size-range"
                   type="range" 
                   min="0.5" 
                   max="3" 
                   step="0.1" 
                   value={blobSettings.size} 
-                  onChange={(e) => setBlobSettings({...blobSettings, size: parseFloat(e.target.value)})}
+                  onChange={(e) => updateSetting('size', parseFloat(e.target.value))}
                 />
               </div>
 
               <div className="settings-group">
-                <label>Sensitivity</label>
+                <label htmlFor="sensitivity-range">Sensitivity</label>
                 <input 
+                  id="sensitivity-range"
                   type="range" 
                   min="0.1" 
                   max="5" 
                   step="0.1" 
                   value={blobSettings.sensitivity} 
-                  onChange={(e) => setBlobSettings({...blobSettings, sensitivity: parseFloat(e.target.value)})}
+                  onChange={(e) => updateSetting('sensitivity', parseFloat(e.target.value))}
                 />
               </div>
 
               <div className="settings-group">
-                <label>Enable Drag</label>
+                <label htmlFor="drag-toggle">Enable Drag</label>
                 <input 
+                  id="drag-toggle"
                   type="checkbox" 
                   checked={blobSettings.isDraggable} 
-                  onChange={(e) => setBlobSettings({...blobSettings, isDraggable: e.target.checked})}
+                  onChange={(e) => updateSetting('isDraggable', e.target.checked)}
                 />
               </div>
 
-
-              <div className="settings-actions" style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn-save" style={{ flex: 1 }} onClick={onSave}>
+              <div className="settings-actions">
+                <button className="btn-save" onClick={onSave}>
                   Save
                 </button>
                 <button 
-                  className="btn-save" 
-                  style={{ flex: 1, background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)' }} 
+                  className="btn-reset" 
                   onClick={onReset}
                 >
                   Reset

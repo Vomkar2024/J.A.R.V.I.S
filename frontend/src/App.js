@@ -1,69 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import background from './img/background.jpeg';
 import './App.css';
 import Navbar from './component/Navbar';
 import FireAIBlob from './component/blob';
 
-function App() {
-  const [blobSettings, setBlobSettings] = useState({
-    color: '#ff6b00', // Scorching fire orange
-    size: 0.8,
-    sensitivity: 25,
-    position: { x: 50, y: 50 },
-    isDraggable: false
-  });
+const DEFAULT_SETTINGS = {
+  color: '#ff6b00', // Scorching fire orange
+  size: 0.8,
+  sensitivity: 1.5,
+  position: { x: 50, y: 50 },
+  isDraggable: false
+};
 
+function App() {
+  const [blobSettings, setBlobSettings] = useState(DEFAULT_SETTINGS);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('blobSettings');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setBlobSettings(prev => ({ ...prev, ...parsed, isDraggable: false }));
+    try {
+      const saved = localStorage.getItem('blobSettings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setBlobSettings(prev => ({ 
+          ...prev, 
+          ...parsed, 
+          isDraggable: false // Always default to not draggable on load
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load blob settings from localStorage:', error);
+      // Fallback to default settings already in state
     }
   }, []);
 
-  const handleSave = () => {
-    localStorage.setItem('blobSettings', JSON.stringify({
-      color: blobSettings.color,
-      size: blobSettings.size,
-      sensitivity: blobSettings.sensitivity,
-      position: blobSettings.position
-    }));
-    alert('Settings saved!');
-  };
+  const handleSave = useCallback(() => {
+    try {
+      const { color, size, sensitivity, position } = blobSettings;
+      localStorage.setItem('blobSettings', JSON.stringify({
+        color,
+        size,
+        sensitivity,
+        position
+      }));
+      alert('Settings saved successfully!');
+    } catch (error) {
+      console.error('Failed to save blob settings:', error);
+      alert('Failed to save settings. Please check your browser storage permissions.');
+    }
+  }, [blobSettings]);
 
-  const handleReset = () => {
-    const defaultSettings = {
-      color: '#ff6b00',
-      size: 0.8,
-      sensitivity: 1.5,
-      position: { x: 50, y: 50 },
-      isDraggable: false
-    };
-    setBlobSettings(defaultSettings);
-    localStorage.removeItem('blobSettings');
-  };
+  const handleReset = useCallback(() => {
+    setBlobSettings(DEFAULT_SETTINGS);
+    try {
+      localStorage.removeItem('blobSettings');
+    } catch (error) {
+      console.error('Failed to clear localStorage:', error);
+    }
+  }, []);
 
-  const handleMouseDown = (e) => {
+  const handleMouseDown = useCallback((e) => {
     if (blobSettings.isDraggable) {
       setIsDragging(true);
     }
-  };
+  }, [blobSettings.isDraggable]);
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = useCallback((e) => {
     if (isDragging && blobSettings.isDraggable) {
       const x = (e.clientX / window.innerWidth) * 100;
       const rawY = (e.clientY / window.innerHeight) * 100;
-      // Prevent blob from being dragged too high into the navbar area
+      // Prevent blob from being dragged too high into the navbar area (min 15%)
       const y = Math.max(15, rawY); 
       setBlobSettings(prev => ({ ...prev, position: { x, y } }));
     }
-  };
+  }, [isDragging, blobSettings.isDraggable]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
-  };
+  }, []);
 
   return (
     <div
@@ -77,6 +90,21 @@ function App() {
         onSave={handleSave}
         onReset={handleReset}
       />
+      
+      <main className="main-content">
+        <section className="hero-section">
+          <div className="glass-panel">
+            <h1 className="hero-title">J.A.R.V.I.S</h1>
+            <p className="hero-subtitle">Just A Rather Very Intelligent System</p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <div style={{ height: '2px', width: '50px', background: 'var(--fire-gradient)', margin: 'auto 0' }}></div>
+              <span style={{ fontSize: '0.8rem', letterSpacing: '2px', color: 'var(--fire-yellow)' }}>NEURAL INTERFACE ACTIVE</span>
+              <div style={{ height: '2px', width: '50px', background: 'var(--fire-gradient)', margin: 'auto 0' }}></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
       <div
         className="blob-wrapper"
         onMouseDown={handleMouseDown}
@@ -90,18 +118,14 @@ function App() {
       >
         <FireAIBlob
           color={blobSettings.color}
-          size={blobSettings.size}
           sensitivity={blobSettings.sensitivity}
-          isDraggable={blobSettings.isDraggable}
-          onPositionChange={(pos) => setBlobSettings(prev => ({ ...prev, position: pos }))}
         />
-
       </div>
-      <img src={background} className="bg-image" alt="" aria-hidden="true" />
+      
+      <img src={background} className="bg-image" alt="Background" aria-hidden="true" />
     </div>
   );
 }
-
 
 export default App;
 
