@@ -53,25 +53,6 @@
   animation: logoPulse 2s infinite ease-in-out;
 }
 
-.scan-line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 1px;
-  background: rgba(255, 107, 0, 0.6);
-  box-shadow: 0 0 10px var(--fire-orange);
-  pointer-events: none;
-  animation: scanLoop 2s infinite linear;
-  animation-delay: 1.5s; /* Start after reveal */
-}
-
-@keyframes scanLoop {
-  0% { top: 0; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { top: 100%; opacity: 0; }
-}
 
 .loading-container {
   width: 100%;
@@ -85,8 +66,8 @@
 }
 
 .loading-bar {
-  width: 100%;
-  height: 2px;
+  width: 250px;
+  height: 1px;
   background: rgba(255, 255, 255, 0.1);
   position: relative;
   overflow: hidden;

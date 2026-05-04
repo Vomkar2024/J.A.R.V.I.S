@@ -22,7 +22,6 @@ const SplashScreen = ({ onComplete }) => {
       <div className="splash-content">
         <div className="jarvis-logo">
           <h1 className="splash-title">J.A.R.V.I.S</h1>
-          <div className="scan-line"></div>
         </div>
         <div className="loading-container">
           <div className="loading-bar"></div>

@@ -29,8 +29,8 @@
 .hero-subtitle {
   font-family: var(--heading);
   font-size: clamp(1rem, 4vw, 1.5rem);
-  color: var(--text-main);
-  opacity: 0.8;
+  color: #cc0000;
+  text-shadow: 0 0 10px rgba(204, 0, 0, 0.4);
   margin-bottom: 2rem;
   max-width: 700px;
   margin-inline: auto;
