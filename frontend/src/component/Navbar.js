@@ -1,10 +1,22 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import './Navbar.css';
 
+/**
+ * Navbar Component
+ * This is the top navigation bar of the app. It contains the logo,
+ * the main links, and the settings menu where you can customize the AI.
+ */
 const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop }) => {
+  // State to track if the settings menu is open or closed
   const [showSettings, setShowSettings] = useState(false);
+  // Reference to the settings panel to detect clicks outside of it
   const settingsRef = useRef(null);
 
+  /**
+   * Click Outside Logic
+   * If the user clicks anywhere else on the screen while the settings menu
+   * is open, this function will automatically close it.
+   */
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (settingsRef.current && !settingsRef.current.contains(event.target)) {
@@ -21,9 +33,14 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
     };
   }, [showSettings]);
 
+  /**
+   * Position Adjustment
+   * When the settings menu opens, we move the AI blob to the corner
+   * so it doesn't block the menu. When it closes, we move it back.
+   */
   useEffect(() => {
     if (showSettings) {
-      onStop();
+      onStop(); // Stop listening while adjusting settings
       setBlobSettings(prev => ({ ...prev, position: { x: 90, y: 80 } }));
     } else {
       setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 } }));
@@ -31,14 +48,26 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
   }, [showSettings, onStop, setBlobSettings]);
 
 
+  /**
+   * toggleSettings
+   * Opens or closes the settings panel.
+   */
   const toggleSettings = useCallback(() => {
     setShowSettings(prev => !prev);
   }, []);
 
+  /**
+   * updateSetting
+   * Updates a specific value (like color or size) in the AI blob's memory.
+   */
   const updateSetting = useCallback((key, value) => {
     setBlobSettings(prev => ({ ...prev, [key]: value }));
   }, [setBlobSettings]);
 
+  /**
+   * handleToggle
+   * Starts or stops the voice recognition system.
+   */
   const handleToggle = () => {
     if (isListening) {
       onStop();
@@ -49,6 +78,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
 
   return (
     <nav className={`navbar ${showHero ? 'hidden' : ''}`}>
+      {/* The Brand Name */}
       <div className="nav-logo">
         J.A.R.V.I.S
       </div>
@@ -63,6 +93,8 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
         <li className="nav-item">
           <a href="#nexus" className="nav-link">Nexus</a>
         </li>
+        
+        {/* Settings Menu Button and Panel */}
         <li className="nav-item" ref={settingsRef}>
           <button 
             className="nav-link settings-trigger" 
@@ -76,6 +108,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
             <div className="settings-panel">
               <h3 className="settings-title">Blob Customization</h3>
               
+              {/* Color Control */}
               <div className="settings-group">
                 <label htmlFor="color-picker">Color</label>
                 <input 
@@ -86,6 +119,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
                 />
               </div>
 
+              {/* Size Control */}
               <div className="settings-group">
                 <div className="label-with-value">
                   <label htmlFor="size-range">Size</label>
@@ -102,6 +136,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
                 />
               </div>
 
+              {/* Sensitivity Control (Voice Reactivity) */}
               <div className="settings-group">
                 <div className="label-with-value">
                   <label htmlFor="sensitivity-range">Sensitivity</label>
@@ -120,6 +155,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
 
               <hr className="settings-divider" />
 
+              {/* Drag Mode Toggle */}
               <div className="settings-row">
                 <label htmlFor="drag-toggle">Enable Drag Interface</label>
                 <input 
@@ -131,6 +167,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
               </div>
 
 
+              {/* Save and Reset Buttons */}
               <div className="settings-actions">
                 <button className="btn-save" onClick={onSave}>
                   Save
@@ -147,6 +184,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
         </li>
       </ul>
 
+      {/* Initialize / Stop Button */}
       <div className="nav-actions">
         <button className={`btn-launch ${isListening ? 'listening' : ''}`} onClick={handleToggle}>
           {isListening ? 'Stop' : 'Initialize'}
