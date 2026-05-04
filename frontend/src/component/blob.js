@@ -145,7 +145,7 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
         mouse: { value: 0.0 },
         intensity: { value: 0.0 },
         uTexture: { value: sparkTexture },
-        uColor: { value: new THREE.Color(color) },
+        uColor: { value: new THREE.Color(colorRef.current) },
         resolution: { value: new THREE.Vector2(width, height) }
       },
       vertexShader: SHADERS.vertex,

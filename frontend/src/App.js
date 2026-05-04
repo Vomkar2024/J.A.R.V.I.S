@@ -130,6 +130,14 @@ function App() {
   }, [isLoading]);
 
   /**
+   * handleSplashComplete
+   * Called when the splash screen finishes its animation.
+   */
+  const handleSplashComplete = useCallback(() => {
+    setIsLoading(false);
+  }, []);
+
+  /**
    * startAudio Function
    * This activates the microphone and starts measuring sound levels
    * to make the AI blob dance/react to your voice.
@@ -264,7 +272,7 @@ function App() {
   return (
     <>
       {/* 1. Show the Loading Screen if still loading */}
-      {isLoading && <SplashScreen onComplete={() => setIsLoading(false)} />}
+      {isLoading && <SplashScreen onComplete={handleSplashComplete} />}
       
       <div
         className={`app-container ${isLoading ? 'hidden' : ''}`}
