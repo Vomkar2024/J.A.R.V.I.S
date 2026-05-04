@@ -1,0 +1,10 @@
+{
+  "name": "jarvis-project",
+  "version": "1.0.0",
+  "description": "Root package to manage J.A.R.V.I.S project",
+  "scripts": {
+    "start": "npm start --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "test": "npm test --prefix frontend"
+  }
+}
