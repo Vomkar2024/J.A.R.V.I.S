@@ -5,6 +5,11 @@
   width: 100%;
   height: 100%;
   background: #000;
+  background-image: 
+    linear-gradient(rgba(255, 107, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 107, 0, 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
+  background-position: center;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -32,6 +37,9 @@
 .jarvis-logo {
   position: relative;
   margin-bottom: 1rem;
+  opacity: 0;
+  animation: hudContentReveal 1s forwards;
+  animation-delay: 0.75s;
 }
 
 .splash-title {
@@ -50,10 +58,19 @@
   top: 0;
   left: 0;
   width: 100%;
-  height: 2px;
-  background: rgba(255, 107, 0, 0.8);
-  box-shadow: 0 0 15px var(--fire-orange);
-  animation: scan 2s infinite linear;
+  height: 1px;
+  background: rgba(255, 107, 0, 0.6);
+  box-shadow: 0 0 10px var(--fire-orange);
+  pointer-events: none;
+  animation: scanLoop 2s infinite linear;
+  animation-delay: 1.5s; /* Start after reveal */
+}
+
+@keyframes scanLoop {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
 }
 
 .loading-container {
@@ -62,6 +79,9 @@
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  opacity: 0;
+  animation: hudContentReveal 1s forwards;
+  animation-delay: 0.85s; /* Slightly staggered after logo */
 }
 
 .loading-bar {
@@ -95,28 +115,51 @@
 
 .hud-decorations .corner {
   position: absolute;
-  width: 30px;
-  height: 30px;
-  border: 2px solid var(--fire-orange);
-  opacity: 0.5;
+  width: 25px;
+  height: 25px;
+  border: 1px solid var(--fire-orange);
+  box-shadow: 0 0 10px rgba(255, 107, 0, 0.3);
+  opacity: 0;
+  animation-duration: 1.5s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: forwards;
 }
 
-.top-left { top: -20px; left: -20px; border-right: none; border-bottom: none; }
-.top-right { top: -20px; right: -20px; border-left: none; border-bottom: none; }
-.bottom-left { bottom: -20px; left: -20px; border-right: none; border-top: none; }
-.bottom-right { bottom: -20px; right: -20px; border-left: none; border-top: none; }
+.top-left { animation-name: cornerTL; }
+.top-right { animation-name: cornerTR; }
+.bottom-left { animation-name: cornerBL; }
+.bottom-right { animation-name: cornerBR; }
+
+@keyframes cornerTL {
+  0% { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  100% { top: -25px; left: -25px; transform: translate(0, 0) scale(1); opacity: 0.6; }
+}
+
+@keyframes cornerTR {
+  0% { top: 50%; right: 50%; transform: translate(50%, -50%) scale(0); opacity: 0; }
+  100% { top: -25px; right: -25px; transform: translate(0, 0) scale(1); opacity: 0.6; }
+}
+
+@keyframes cornerBL {
+  0% { bottom: 50%; left: 50%; transform: translate(-50%, 50%) scale(0); opacity: 0; }
+  100% { bottom: -25px; left: -25px; transform: translate(0, 0) scale(1); opacity: 0.6; }
+}
+
+@keyframes cornerBR {
+  0% { bottom: 50%; right: 50%; transform: translate(50%, 50%) scale(0); opacity: 0; }
+  100% { bottom: -25px; right: -25px; transform: translate(0, 0) scale(1); opacity: 0.6; }
+}
+
+@keyframes hudContentReveal {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
 
 @keyframes logoPulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }
   50% { transform: scale(1.05); filter: brightness(1.3); }
 }
 
-@keyframes scan {
-  0% { top: 0; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { top: 100%; opacity: 0; }
-}
 
 @keyframes loadingProgress {
   0% { left: -100%; }
@@ -127,3 +170,86 @@
   from { opacity: 0.3; }
   to { opacity: 0.8; }
 }
+
+.splash-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  animation: fadeInBtn 0.5s ease-out;
+}
+
+.initialize-btn {
+  background: rgba(255, 107, 0, 0.1);
+  border: 2px solid #ff6b00;
+  color: #ff6b00;
+  padding: 15px 40px;
+  font-family: 'Inter', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(5px);
+  width: 280px;
+}
+
+.initialize-btn.listening {
+  background: rgba(255, 107, 0, 0.3);
+  box-shadow: 0 0 30px rgba(255, 107, 0, 0.4);
+  color: #fff;
+}
+
+.initialize-btn:hover {
+  background: #ff6b00;
+  color: #000;
+  box-shadow: 0 0 50px rgba(255, 107, 0, 0.6);
+  transform: scale(1.05);
+}
+
+.proceed-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+  padding: 10px 30px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+}
+
+.proceed-btn:hover {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  letter-spacing: 4px;
+}
+
+.btn-glow {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 107, 0, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+  animation: rotateBtn 10s linear infinite;
+}
+
+@keyframes rotateBtn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInBtn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+

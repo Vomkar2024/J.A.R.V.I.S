@@ -1,0 +1,106 @@
+.voice-control-container {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 600px;
+  pointer-events: none;
+}
+
+.voice-btn {
+  pointer-events: auto;
+  background: rgba(255, 107, 0, 0.1);
+  border: 2px solid rgba(255, 107, 0, 0.5);
+  backdrop-filter: blur(10px);
+  color: #ff6b00;
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 0 20px rgba(255, 107, 0, 0.2);
+}
+
+.voice-btn:hover {
+  background: rgba(255, 107, 0, 0.2);
+  border-color: #ff6b00;
+  box-shadow: 0 0 30px rgba(255, 107, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+.voice-btn.listening {
+  background: rgba(255, 107, 0, 0.3);
+  border-color: #ff6b00;
+  color: #fff;
+  box-shadow: 0 0 40px rgba(255, 107, 0, 0.6);
+}
+
+.pulse-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50px;
+  border: 2px solid #ff6b00;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.voice-btn.listening .pulse-ring {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.transcript-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 15px 30px;
+  border-radius: 20px;
+  max-width: 80%;
+  text-align: center;
+  animation: slideUp 0.4s ease-out;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.transcript-text {
+  color: #fff;
+  font-size: 1.1rem;
+  margin: 0;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.voice-control-error {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ff4b2b;
+  background: rgba(0,0,0,0.8);
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

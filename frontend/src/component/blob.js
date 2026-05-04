@@ -80,12 +80,13 @@ const SHADERS = {
   `
 };
 
-const FireAIBlob = ({ color, sensitivity }) => {
+const FireAIBlob = ({ color, sensitivity, volume }) => {
   const containerRef = useRef(null);
   const requestRef = useRef();
   const materialRef = useRef();
   const sensitivityRef = useRef(sensitivity);
   const colorRef = useRef(color);
+  const volumeRef = useRef(volume || 0);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -130,14 +131,14 @@ const FireAIBlob = ({ color, sensitivity }) => {
 
     let mouseX = 0;
     let mouseY = 0;
-    let targetIntensity = 0;
+    let mouseIntensity = 0;
     let currentIntensity = 0;
     const targetColorObj = new THREE.Color(colorRef.current);
 
     const onMouseMove = (event) => {
       mouseX = (event.clientX / window.innerWidth) * 2 - 1;
       mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
-      targetIntensity = 1.0;
+      mouseIntensity = 0.5; // Slight reaction to mouse
     };
 
     window.addEventListener('mousemove', onMouseMove);
@@ -146,9 +147,15 @@ const FireAIBlob = ({ color, sensitivity }) => {
     const animate = () => {
       time += 0.02;
 
-      // Smoothly interpolate intensity with sensitivity
-      currentIntensity += (targetIntensity - currentIntensity) * (0.02 * (sensitivityRef.current || 1.0));
-      targetIntensity *= 0.99;
+      // Audio-driven intensity with mouse fallback
+      const audioIntensity = volumeRef.current * 6.0 * (sensitivityRef.current || 1.0); 
+      const targetIntensity = Math.max(audioIntensity, mouseIntensity);
+
+      // Smoother interpolation (lerp)
+      currentIntensity += (targetIntensity - currentIntensity) * (0.04 * (sensitivityRef.current || 1.0)); 
+      mouseIntensity *= 0.95; // Decay mouse intensity
+
+
 
       if (materialRef.current) {
         materialRef.current.uniforms.time.value = time;
@@ -186,6 +193,10 @@ const FireAIBlob = ({ color, sensitivity }) => {
     colorRef.current = color;
   }, [color]);
 
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
   return (
     <div
       ref={containerRef}
@@ -200,5 +211,6 @@ const FireAIBlob = ({ color, sensitivity }) => {
     />
   );
 };
+
 
 export default FireAIBlob;

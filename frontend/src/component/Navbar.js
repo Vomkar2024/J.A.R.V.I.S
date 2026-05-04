@@ -1,8 +1,35 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import './Navbar.css';
 
-const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) => {
+const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const settingsRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setShowSettings(false);
+      }
+    };
+
+    if (showSettings) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSettings]);
+
+  useEffect(() => {
+    if (showSettings) {
+      onStop();
+      setBlobSettings(prev => ({ ...prev, position: { x: 90, y: 80 } }));
+    } else {
+      setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 } }));
+    }
+  }, [showSettings, onStop, setBlobSettings]);
+
 
   const toggleSettings = useCallback(() => {
     setShowSettings(prev => !prev);
@@ -11,6 +38,14 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
   const updateSetting = useCallback((key, value) => {
     setBlobSettings(prev => ({ ...prev, [key]: value }));
   }, [setBlobSettings]);
+
+  const handleToggle = () => {
+    if (isListening) {
+      onStop();
+    } else {
+      onInitialize();
+    }
+  };
 
   return (
     <nav className={`navbar ${showHero ? 'hidden' : ''}`}>
@@ -28,7 +63,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
         <li className="nav-item">
           <a href="#nexus" className="nav-link">Nexus</a>
         </li>
-        <li className="nav-item">
+        <li className="nav-item" ref={settingsRef}>
           <button 
             className="nav-link settings-trigger" 
             onClick={toggleSettings}
@@ -52,7 +87,10 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
               </div>
 
               <div className="settings-group">
-                <label htmlFor="size-range">Size</label>
+                <div className="label-with-value">
+                  <label htmlFor="size-range">Size</label>
+                  <span className="setting-value">{blobSettings.size.toFixed(1)}</span>
+                </div>
                 <input 
                   id="size-range"
                   type="range" 
@@ -65,7 +103,10 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
               </div>
 
               <div className="settings-group">
-                <label htmlFor="sensitivity-range">Sensitivity</label>
+                <div className="label-with-value">
+                  <label htmlFor="sensitivity-range">Sensitivity</label>
+                  <span className="setting-value">{blobSettings.sensitivity.toFixed(1)}</span>
+                </div>
                 <input 
                   id="sensitivity-range"
                   type="range" 
@@ -77,8 +118,10 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
                 />
               </div>
 
-              <div className="settings-group">
-                <label htmlFor="drag-toggle">Enable Drag</label>
+              <hr className="settings-divider" />
+
+              <div className="settings-row">
+                <label htmlFor="drag-toggle">Enable Drag Interface</label>
                 <input 
                   id="drag-toggle"
                   type="checkbox" 
@@ -86,6 +129,7 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
                   onChange={(e) => updateSetting('isDraggable', e.target.checked)}
                 />
               </div>
+
 
               <div className="settings-actions">
                 <button className="btn-save" onClick={onSave}>
@@ -104,13 +148,14 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero }) =>
       </ul>
 
       <div className="nav-actions">
-        <button className="btn-launch">
-          Initialize
+        <button className={`btn-launch ${isListening ? 'listening' : ''}`} onClick={handleToggle}>
+          {isListening ? 'Stop' : 'Initialize'}
         </button>
       </div>
     </nav>
   );
 };
+
 
 export default Navbar;
 
