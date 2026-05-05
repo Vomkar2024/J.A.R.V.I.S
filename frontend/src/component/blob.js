@@ -183,12 +183,12 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
     const animate = () => {
       time += 0.02; // Keeps the "fire" moving
 
-      // Calculate how much the blob should pulse based on voice volume
-      const audioIntensity = volumeRef.current * 6.0 * (sensitivityRef.current || 1.0); 
+      // Calculate how much the blob should pulse based on voice volume (increased multiplier for better sensitivity)
+      const audioIntensity = volumeRef.current * 10.0 * (sensitivityRef.current || 1.0); 
       const targetIntensity = Math.max(audioIntensity, mouseIntensity);
 
-      // Smoothly transition between intensity levels
-      currentIntensity += (targetIntensity - currentIntensity) * (0.04 * (sensitivityRef.current || 1.0)); 
+      // Smoothly transition between intensity levels (increased smoothing for better responsiveness)
+      currentIntensity += (targetIntensity - currentIntensity) * (0.12 * (sensitivityRef.current || 1.0)); 
       mouseIntensity *= 0.95; // Gradually forget mouse movement
 
 
@@ -252,4 +252,4 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
 };
 
 
-export default FireAIBlob;
+export default FireAIBlob;

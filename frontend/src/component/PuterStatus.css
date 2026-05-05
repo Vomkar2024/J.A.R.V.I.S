@@ -1,0 +1,52 @@
+.puter-status {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.status-orb {
+    width: 12px;
+    height: 12px;
+    background: #38bdf8;
+    border-radius: 50%;
+    box-shadow: 0 0 15px #38bdf8;
+    animation: orbPulse 1s infinite alternate;
+}
+
+@keyframes orbPulse {
+    from { opacity: 0.4; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1.1); }
+}
+
+.status-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    color: #38bdf8;
+    letter-spacing: 2px;
+    font-weight: 700;
+}
+
+.loading-bar {
+    width: 150px;
+    height: 2px;
+    background: rgba(56, 189, 248, 0.1);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.bar-progress {
+    width: 40%;
+    height: 100%;
+    background: #38bdf8;
+    animation: loadingMove 2s infinite linear;
+}
+
+@keyframes loadingMove {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(300%); }
+}

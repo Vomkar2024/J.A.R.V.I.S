@@ -219,7 +219,6 @@
 }
 
 .settings-group input[type="color"] {
-
     width: 40px;
     height: 30px;
     border: none;
@@ -230,6 +229,30 @@
 .settings-group input[type="range"] {
     flex: 1;
     accent-color: var(--fire-orange);
+}
+
+.settings-select {
+    width: 100%;
+    padding: 0.6rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 107, 0, 0.3);
+    border-radius: 6px;
+    color: #f8fafc;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.settings-select:hover, .settings-select:focus {
+    border-color: var(--fire-orange);
+    background: rgba(255, 107, 0, 0.1);
+}
+
+.settings-select option {
+    background: #0f172a;
+    color: #f8fafc;
 }
 
 .btn-save {
@@ -279,4 +302,3 @@
     background: rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
 }
-
