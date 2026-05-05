@@ -24,14 +24,13 @@ function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen, handleCloseMenu]);
 
-  const handleOpenMenu = () => {
+  const handleOpenMenu = useCallback(() => {
     setIsMenuOpen(true);
     setIsClosing(false);
-    // When settings open, the AI blob moves to the bottom right
     setBlobSettings(prev => ({ ...prev, position: { x: 85, y: 85 }, size: 0.5 }));
-  };
+  }, [setBlobSettings]);
 
-  const handleCloseMenu = () => {
+  const handleCloseMenu = useCallback(() => {
     setIsClosing(true);
     setTimeout(() => {
       setIsMenuOpen(false);
@@ -39,15 +38,15 @@ function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
       // When settings close, the AI blob returns to center
       setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 }, size: 0.8 }));
     }, 500); // Wait for the retraction animation
-  };
+  }, [setBlobSettings]);
 
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setBlobSettings(prev => ({
       ...prev,
       [name]: name === 'color' ? value : parseFloat(value)
     }));
-  };
+  }, [setBlobSettings]);
 
   return (
     <nav className={`navbar ${showHero ? 'hidden' : ''}`}>

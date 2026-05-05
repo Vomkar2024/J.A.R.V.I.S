@@ -54,7 +54,8 @@ export const useBrain = (lastProcessedTextRef) => {
       }
 
       // Fallback Google Translate
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+      const GOOGLE_TRANSLATE_API = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=';
+      const url = `${GOOGLE_TRANSLATE_API}${encodeURIComponent(text)}`;
       const response = await fetch(url);
       const data = await response.json();
       

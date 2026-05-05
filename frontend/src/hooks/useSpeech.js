@@ -127,6 +127,11 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
     }
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     
+    // Close AudioContext to release hardware resources
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close();
+    }
+    
     setIsListening(false);
     setVolume(0);
   }, []);

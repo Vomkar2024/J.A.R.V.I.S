@@ -10,7 +10,8 @@ const SystemStatus = ({ isListening, isProcessing, isSupported, permissionGrante
   // Default to retracted as requested
   const [isRetracted, setIsRetracted] = useState(true);
   const isNeuralActive = typeof window.puter !== 'undefined';
-  
+  const toggleHUD = useCallback(() => setIsRetracted(prev => !prev), []);
+
   return (
     <div className={`system-status-container ${isRetracted ? 'retracted' : 'expanded'} ${showHero ? 'hidden' : ''}`}>
       
@@ -20,7 +21,7 @@ const SystemStatus = ({ isListening, isProcessing, isSupported, permissionGrante
       {/* Toggle Button */}
       <button 
         className="hud-toggle" 
-        onClick={() => setIsRetracted(!isRetracted)}
+        onClick={toggleHUD}
         title={isRetracted ? "Expand HUD" : "Retract HUD"}
       >
         <span className="toggle-icon">{'<'}</span>

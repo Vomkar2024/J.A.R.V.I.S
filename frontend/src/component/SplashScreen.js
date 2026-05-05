@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import './css/SplashScreen.css';
 import splashGif from '../img/slashscreen.gif';
 
+const SPLASH_DURATION = 8000;
+const FADE_DURATION = 800;
+
 /**
  * SplashScreen Component
  * This is the very first thing the user sees. It's a loading screen
@@ -11,14 +14,18 @@ const SplashScreen = ({ onComplete }) => {
   const [isFading, setIsFading] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const fadeTimer = setTimeout(() => {
       setIsFading(true);
-      setTimeout(() => {
-        onComplete();
-      }, 800);
-    }, 8000);
+    }, SPLASH_DURATION);
 
-    return () => clearTimeout(timer);
+    const completeTimer = setTimeout(() => {
+      onComplete();
+    }, SPLASH_DURATION + FADE_DURATION);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(completeTimer);
+    };
   }, [onComplete]);
 
   return (
