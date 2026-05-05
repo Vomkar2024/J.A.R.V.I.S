@@ -34,13 +34,19 @@ const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
   }, [showSettings]);
 
   /**
-   * Stop listening when settings are open
+   * Position Adjustment
+   * When the settings menu opens, we move the AI blob to the corner
+   * so it doesn't block the menu. When it closes, we move it back.
    */
   useEffect(() => {
     if (showSettings) {
-      onStop();
+      onStop(); // Stop listening while adjusting settings
+      setBlobSettings(prev => ({ ...prev, position: { x: 90, y: 80 } }));
+    } else {
+      // Return to default or user-defined center when settings close
+      setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 } }));
     }
-  }, [showSettings, onStop]);
+  }, [showSettings, onStop, setBlobSettings]);
 
 
   /**
