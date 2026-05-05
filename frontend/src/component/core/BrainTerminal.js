@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './BrainTerminal.css';
+import './css/BrainTerminal.css';
 
 /**
  * BrainTerminal Component
@@ -8,7 +8,6 @@ import './BrainTerminal.css';
  */
 const BrainTerminal = ({ aiResponse, isThinking, translationData, isVisible }) => {
   const [displayText, setDisplayText] = useState('');
-  const [currentLine, setCurrentLine] = useState(0);
   const scrollRef = useRef(null);
 
   // Typing effect for AI response

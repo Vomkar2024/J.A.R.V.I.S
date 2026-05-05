@@ -1,0 +1,142 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+/**
+ * useSpeech Hook
+ * Encapsulates Speech Recognition, Audio Analysis, and Microphone permissions.
+ */
+export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
+  const [isListening, setIsListening] = useState(false);
+  const [volume, setVolume] = useState(0);
+  const [isSupported, setIsSupported] = useState(true);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+  
+  const recognitionRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const isListeningRef = useRef(false);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  // Initialize Permissions
+  useEffect(() => {
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'microphone' }).then((result) => {
+        setPermissionGranted(result.state === 'granted');
+        result.onchange = () => {
+          setPermissionGranted(result.state === 'granted');
+        };
+      });
+    }
+  }, []);
+
+  // Initialize Speech Recognition
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        let currentTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        onTranscriptChange(currentTranscript);
+      };
+
+      recognition.onend = () => {
+        if (isListeningRef.current) {
+          try { recognition.start(); } catch (e) {
+            console.error('Recognition restart failed:', e);
+          }
+        }
+      };
+      recognitionRef.current = recognition;
+    } else {
+      setIsSupported(false);
+    }
+  }, [onTranscriptChange]);
+
+  const startSpeech = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setPermissionGranted(true);
+      
+      // Audio Analysis setup
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      source.connect(analyserRef.current);
+
+      // Recorder setup
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        if (audioChunksRef.current.length > 0 && onAudioBlobReady) {
+          onAudioBlobReady(audioBlob);
+        }
+        audioChunksRef.current = [];
+      };
+      recorder.start(5000); // 5s neural chunks
+      mediaRecorderRef.current = recorder;
+
+      // Volume tracking
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      let smoothedVolume = 0;
+      
+      const updateVolume = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
+        const average = sum / bufferLength;
+        const boostedVolume = Math.sqrt(average / 128) * 1.5;
+        smoothedVolume = (smoothedVolume * 0.7) + (boostedVolume * 0.3);
+        setVolume(smoothedVolume); 
+        animationFrameRef.current = requestAnimationFrame(updateVolume);
+      };
+
+      updateVolume();
+      setIsListening(true);
+      if (recognitionRef.current) recognitionRef.current.start();
+      
+      return true;
+    } catch (err) {
+      console.error('Speech initialization failed:', err);
+      setIsSupported(false);
+      setPermissionGranted(false);
+      return false;
+    }
+  }, [onAudioBlobReady]);
+
+  const stopSpeech = useCallback(() => {
+    if (recognitionRef.current) recognitionRef.current.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    
+    setIsListening(false);
+    setVolume(0);
+  }, []);
+
+  return {
+    isListening,
+    volume,
+    isSupported,
+    permissionGranted,
+    startSpeech,
+    stopSpeech
+  };
+};

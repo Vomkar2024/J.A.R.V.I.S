@@ -9,8 +9,11 @@
     transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 1.5s ease, visibility 1.5s ease;
     opacity: 1;
     visibility: visible;
-    overflow: hidden; /* Critical for unified scanline clipping */
+    overflow: hidden; /* Ensures the scanline is clipped to the HUD body */
     box-shadow: -20px 0 60px rgba(0, 0, 0, 0.8);
+    background: rgba(5, 5, 10, 0.95); /* Unified background for the whole group */
+    border: 1px solid rgba(255, 107, 0, 0.1);
+    border-right: none;
 }
 
 .system-status-container.hidden {
@@ -23,35 +26,40 @@
     transform: translateX(calc(100% - 60px));
 }
 
-/* Unified Scanning Glow: One single line from toggle to bar */
+/* Unified Scanning Pulse: A distinct vertical line moving across the whole panel */
 .unified-scanning-glow {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: 200px; /* Width of the light pulse */
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 107, 0, 0.1), transparent);
-    animation: unifiedHudScan 5s linear infinite;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 107, 0, 0.01) 30%, 
+        rgba(255, 107, 0, 0.15) 50%, 
+        rgba(255, 107, 0, 0.01) 70%, 
+        transparent 100%
+    );
+    animation: unifiedHudScan 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     pointer-events: none;
-    z-index: 5; /* Above backgrounds, below text */
+    z-index: 5;
     opacity: 0;
     transition: opacity 0.3s ease;
 }
 
-/* Only show scanline when expanded */
 .expanded .unified-scanning-glow {
     opacity: 1;
 }
 
 @keyframes unifiedHudScan {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(100%); }
+    0% { transform: translateX(-200px); } /* Start completely outside the toggle */
+    100% { transform: translateX(800px); } /* Move across the entire 600px+ width */
 }
 
 .hud-toggle {
-    background: rgba(5, 5, 10, 0.95);
-    border: 1px solid rgba(255, 107, 0, 0.2);
-    border-right: none;
+    background: transparent; /* Shared background from container */
+    border: none;
+    border-right: 1px solid rgba(255, 107, 0, 0.1); /* Subtle divider */
     color: rgba(255, 107, 0, 0.6);
     width: 60px;
     height: 80px;
@@ -96,11 +104,8 @@
     height: 80px;
     display: flex;
     align-items: center;
-    background: rgba(5, 5, 10, 0.9);
+    background: transparent; /* Shared background from container */
     backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 107, 0, 0.2);
-    border-left: none;
-    border-right: none;
     pointer-events: auto;
     min-width: 550px;
 }
@@ -124,7 +129,7 @@
     gap: 1rem;
     width: 100%;
     justify-content: space-between;
-    z-index: 6; /* Above the unified scanline */
+    z-index: 6;
 }
 
 .status-item {
@@ -171,7 +176,6 @@
 
 .hud-edge-accent.top { top: 0; height: 100%; }
 
-/* Hide scanline on bar hover for clarity */
 .system-status-container:hover .unified-scanning-glow {
     opacity: 0;
 }

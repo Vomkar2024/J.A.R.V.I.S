@@ -1,199 +1,128 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import './Navbar.css';
+import './css/Navbar.css';
 
 /**
  * Navbar Component
- * This is the top navigation bar of the app. It contains the logo,
- * the main links, and the settings menu where you can customize the AI.
+ * This is the main navigation bar at the top of the screen.
+ * It contains the logo, settings menu, and volume visualizer.
  */
-const Navbar = ({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop }) => {
-  // State to track if the settings menu is open or closed
-  const [showSettings, setShowSettings] = useState(false);
-  // Reference to the settings panel to detect clicks outside of it
-  const settingsRef = useRef(null);
+function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const menuRef = useRef(null);
 
-  /**
-   * Click Outside Logic
-   * If the user clicks anywhere else on the screen while the settings menu
-   * is open, this function will automatically close it.
-   */
+  // Close menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
-        setShowSettings(false);
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        handleCloseMenu();
       }
-    };
-
-    if (showSettings) {
+    }
+    if (isMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen, handleCloseMenu]);
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSettings]);
+  const handleOpenMenu = () => {
+    setIsMenuOpen(true);
+    setIsClosing(false);
+    // When settings open, the AI blob moves to the bottom right
+    setBlobSettings(prev => ({ ...prev, position: { x: 85, y: 85 }, size: 0.5 }));
+  };
 
-  /**
-   * Position Adjustment
-   * When the settings menu opens, we move the AI blob to the corner
-   * so it doesn't block the menu. When it closes, we move it back.
-   */
-  useEffect(() => {
-    if (showSettings) {
-      onStop(); // Stop listening while adjusting settings
-      setBlobSettings(prev => ({ ...prev, position: { x: 90, y: 80 } }));
-    } else {
-      // Return to default or user-defined center when settings close
-      setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 } }));
-    }
-  }, [showSettings, onStop, setBlobSettings]);
+  const handleCloseMenu = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsMenuOpen(false);
+      setIsClosing(false);
+      // When settings close, the AI blob returns to center
+      setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 }, size: 0.8 }));
+    }, 500); // Wait for the retraction animation
+  };
 
-
-  /**
-   * toggleSettings
-   * Opens or closes the settings panel.
-   */
-  const toggleSettings = useCallback(() => {
-    setShowSettings(prev => !prev);
-  }, []);
-
-  /**
-   * updateSetting
-   * Updates a specific value (like color or size) in the AI blob's memory.
-   */
-  const updateSetting = useCallback((key, value) => {
-    setBlobSettings(prev => ({ ...prev, [key]: value }));
-  }, [setBlobSettings]);
-
-  /**
-   * handleToggle
-   * Starts or stops the voice recognition system.
-   */
-  const handleToggle = () => {
-    if (isListening) {
-      onStop();
-    } else {
-      onInitialize();
-    }
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setBlobSettings(prev => ({
+      ...prev,
+      [name]: name === 'color' ? value : parseFloat(value)
+    }));
   };
 
   return (
     <nav className={`navbar ${showHero ? 'hidden' : ''}`}>
-      {/* The Brand Name */}
-      <div className="nav-logo">
-        J.A.R.V.I.S
-      </div>
-      
-      <ul className="nav-links">
-        <li className="nav-item">
-          <a href="#home" className="nav-link">Home</a>
-        </li>
-        <li className="nav-item">
-          <a href="#features" className="nav-link">Core</a>
-        </li>
-        <li className="nav-item">
-          <a href="#nexus" className="nav-link">Nexus</a>
-        </li>
-        
-        {/* Settings Menu Button and Panel */}
-        <li className="nav-item" ref={settingsRef}>
+      <div className="nav-container">
+        {/* J.A.R.V.I.S Logo and Status */}
+        <div className="nav-brand">
+          <div className="logo-glow"></div>
+          <h1 className="nav-title">J.A.R.V.I.S</h1>
+          <div className="status-indicator">
+            <span className={`pulse ${isListening ? 'active' : ''}`}></span>
+            <span className="status-text">{isListening ? 'SYSTEM_ACTIVE' : 'SYSTEM_STANDBY'}</span>
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="nav-controls">
           <button 
-            className="nav-link settings-trigger" 
-            onClick={toggleSettings}
-            aria-expanded={showSettings}
+            className={`action-btn ${isListening ? 'active' : ''}`}
+            onClick={isListening ? onStop : onInitialize}
           >
-            Settings
+            {isListening ? 'STOP_LINK' : 'INITIALIZE_LINK'}
+            <div className="btn-border"></div>
           </button>
-          
-          {showSettings && (
-            <div className="settings-panel">
-              <h3 className="settings-title">Blob Customization</h3>
-              
-              {/* Color Control */}
-              <div className="settings-group">
-                <label htmlFor="color-picker">Color</label>
-                <input 
-                  id="color-picker"
-                  type="color" 
-                  value={blobSettings.color} 
-                  onChange={(e) => updateSetting('color', e.target.value)}
-                />
-              </div>
 
-              {/* Size Control */}
-              <div className="settings-group">
-                <div className="label-with-value">
-                  <label htmlFor="size-range">Size</label>
-                  <span className="setting-value">{blobSettings.size.toFixed(1)}</span>
+          <button className="settings-toggle" onClick={handleOpenMenu}>
+            <span className="settings-icon">⚙</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Futuristic Retractable Settings Menu */}
+      {isMenuOpen && (
+        <div className={`settings-overlay ${isClosing ? 'closing' : ''}`}>
+          <div className={`settings-menu ${isClosing ? 'retract' : 'expand'}`} ref={menuRef}>
+            <div className="menu-header">
+              <h2>SYSTEM_CONFIG</h2>
+              <button className="close-btn" onClick={handleCloseMenu}>×</button>
+            </div>
+            
+            <div className="menu-body">
+              <div className="setting-group">
+                <label>NEURAL_COLOR</label>
+                <div className="color-picker-wrapper">
+                  <input type="color" name="color" value={blobSettings.color} onChange={handleChange} />
+                  <span className="color-value">{blobSettings.color.toUpperCase()}</span>
                 </div>
-                <input 
-                  id="size-range"
-                  type="range" 
-                  min="0.5" 
-                  max="3" 
-                  step="0.1" 
-                  value={blobSettings.size} 
-                  onChange={(e) => updateSetting('size', parseFloat(e.target.value))}
-                />
               </div>
 
-              {/* Sensitivity Control (Voice Reactivity) */}
-              <div className="settings-group">
-                <div className="label-with-value">
-                  <label htmlFor="sensitivity-range">Sensitivity</label>
-                  <span className="setting-value">{blobSettings.sensitivity.toFixed(1)}</span>
-                </div>
-                <input 
-                  id="sensitivity-range"
-                  type="range" 
-                  min="0.1" 
-                  max="5" 
-                  step="0.1" 
-                  value={blobSettings.sensitivity} 
-                  onChange={(e) => updateSetting('sensitivity', parseFloat(e.target.value))}
-                />
+              <div className="setting-group">
+                <label>CORE_SCALE</label>
+                <input type="range" name="size" min="0.3" max="2" step="0.1" value={blobSettings.size} onChange={handleChange} />
+                <span className="range-value">{Math.round(blobSettings.size * 100)}%</span>
               </div>
 
-              <hr className="settings-divider" />
-
-              {/* Drag Mode Toggle */}
-              <div className="settings-row">
-                <label htmlFor="drag-toggle">Enable Drag Interface</label>
-                <input 
-                  id="drag-toggle"
-                  type="checkbox" 
-                  checked={blobSettings.isDraggable} 
-                  onChange={(e) => updateSetting('isDraggable', e.target.checked)}
-                />
+              <div className="setting-group">
+                <label>MIC_SENSITIVITY</label>
+                <input type="range" name="sensitivity" min="0.1" max="2" step="0.1" value={blobSettings.sensitivity} onChange={handleChange} />
+                <span className="range-value">{blobSettings.sensitivity}x</span>
               </div>
 
-
-              {/* Save and Reset Buttons */}
-              <div className="settings-actions">
-                <button className="btn-save" onClick={onSave}>
-                  Save
-                </button>
-                <button 
-                  className="btn-reset" 
-                  onClick={onReset}
-                >
-                  Reset
-                </button>
+              <div className="menu-actions">
+                <button className="save-btn" onClick={onSave}>COMMIT_CHANGES</button>
+                <button className="reset-btn" onClick={onReset}>RESET_DEFAULTS</button>
               </div>
             </div>
-          )}
-        </li>
-      </ul>
 
-      {/* Initialize / Stop Button */}
-      <div className="nav-actions">
-        <button className={`btn-launch ${isListening ? 'listening' : ''}`} onClick={handleToggle}>
-          {isListening ? 'Stop' : 'Initialize'}
-        </button>
-      </div>
+            <div className="menu-footer">
+              <span className="serial-no">SN: 884-JAR-01</span>
+              <span className="version">V4.0.2</span>
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
-};
-
+}
 
 export default Navbar;

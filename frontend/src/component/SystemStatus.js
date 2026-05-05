@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import './SystemStatus.css';
+import './css/SystemStatus.css';
 
 /**
  * SystemStatus Component

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import './SystemAlert.css';
+import './css/SystemAlert.css';
 
 /**
  * SystemAlert Component

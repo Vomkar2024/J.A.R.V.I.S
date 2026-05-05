@@ -17,30 +17,41 @@ const TTSService = {
 
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Attempt to find the best "Humanoid" voice
-    const voices = window.speechSynthesis.getVoices();
-    
-    // Priority List for "Humanoid" feel:
-    // 1. Google US English (Very clear)
-    // 2. Microsoft Guy/Aria (Neural-like)
-    // 3. Apple Samantha
-    const preferredVoice = voices.find(v => 
-      v.name.includes('Google US English') || 
-      v.name.includes('Neural') ||
-      v.name.includes('Natural') ||
-      v.name.includes('Samantha')
-    ) || voices.find(v => v.lang.startsWith('en'));
+    const startSpeech = (voices) => {
+      // Priority List for "Humanoid" feel:
+      // 1. Google US English (Very clear)
+      // 2. Microsoft Guy/Aria (Neural-like)
+      // 3. Apple Samantha
+      const preferredVoice = voices.find(v => 
+        v.name.includes('Google US English') || 
+        v.name.includes('Neural') ||
+        v.name.includes('Natural') ||
+        v.name.includes('Samantha')
+      ) || voices.find(v => v.lang.startsWith('en'));
 
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      // Modern humanoid characteristics
+      utterance.pitch = 1.0;
+      utterance.rate = 1.0; 
+      utterance.volume = 1.0;
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    let voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) {
+      // Fallback for browsers that load voices asynchronously
+      window.speechSynthesis.onvoiceschanged = () => {
+        voices = window.speechSynthesis.getVoices();
+        startSpeech(voices);
+        window.speechSynthesis.onvoiceschanged = null; // Clean up
+      };
+    } else {
+      startSpeech(voices);
     }
-
-    // Modern humanoid characteristics: slightly slower and lower pitch
-    utterance.pitch = 1.0;
-    utterance.rate = 1.0; 
-    utterance.volume = 1.0;
-
-    window.speechSynthesis.speak(utterance);
   }
 };
 

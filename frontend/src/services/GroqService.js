@@ -3,7 +3,7 @@
  * This service communicates with the Groq API to provide J.A.R.V.I.S with a brain.
  * It uses the Llama-3.1 model for fast and intelligent responses.
  */
-const GROQ_API_KEY = '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';
+const GROQ_API_KEY = process.env.REACT_APP_GROQ_API_KEY;
 const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const GroqService = {
