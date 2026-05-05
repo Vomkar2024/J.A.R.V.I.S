@@ -42,16 +42,7 @@
   animation-delay: 0.75s;
 }
 
-.splash-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 4rem;
-  font-weight: 900;
-  letter-spacing: 12px;
-  color: #fff;
-  margin: 0;
-  text-shadow: 0 0 20px rgba(255, 107, 0, 0.6);
-  animation: logoPulse 2s infinite ease-in-out;
-}
+
 
 .splash-gif {
   width: 400px;

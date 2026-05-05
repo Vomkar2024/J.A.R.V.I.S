@@ -13,7 +13,7 @@ const SplashScreen = ({ onComplete }) => {
 
   /**
    * Loading Timer
-   * This logic waits for 5 seconds (simulating a system boot)
+   * This logic waits for 8 seconds (simulating a system boot)
    * and then triggers the transition to the main app.
    */
   useEffect(() => {
