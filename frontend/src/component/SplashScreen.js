@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './SplashScreen.css';
+import splashGif from '../img/slashscreen.gif';
 
 /**
  * SplashScreen Component
@@ -16,7 +17,7 @@ const SplashScreen = ({ onComplete }) => {
    * and then triggers the transition to the main app.
    */
   useEffect(() => {
-    // 1. Wait 5 seconds
+    // 1. Wait 8 seconds (enough for 2 slow loops)
     const timer = setTimeout(() => {
       setIsFading(true); // Start the fading animation
       
@@ -24,7 +25,7 @@ const SplashScreen = ({ onComplete }) => {
       setTimeout(() => {
         onComplete(); // Tell the main App that we are done loading
       }, 800);
-    }, 5000);
+    }, 8000);
 
     return () => clearTimeout(timer);
   }, [onComplete]);
@@ -34,7 +35,7 @@ const SplashScreen = ({ onComplete }) => {
       <div className="splash-content">
         {/* The big J.A.R.V.I.S title */}
         <div className="jarvis-logo">
-          <h1 className="splash-title">J.A.R.V.I.S</h1>
+          <img src={splashGif} alt="J.A.R.V.I.S" className="splash-gif" />
         </div>
         
         {/* The loading bar and status text */}

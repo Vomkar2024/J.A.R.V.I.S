@@ -53,6 +53,14 @@
   animation: logoPulse 2s infinite ease-in-out;
 }
 
+.splash-gif {
+  width: 400px;
+  max-width: 90vw;
+  height: auto;
+  filter: drop-shadow(0 0 15px rgba(255, 107, 0, 0.5));
+  animation: logoPulse 4s 2 ease-in-out forwards;
+}
+
 
 .loading-container {
   width: 100%;
@@ -82,7 +90,7 @@
   height: 100%;
   background: var(--fire-gradient);
   box-shadow: 0 0 10px var(--fire-orange);
-  animation: loadingProgress 2.5s infinite ease-in-out;
+  animation: loadingProgress 4s infinite ease-in-out;
 }
 
 .loading-text {
