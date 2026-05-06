@@ -1,5 +1,5 @@
 import React from 'react';
-import './css/Hero.css';
+import 'component/css/Hero.css';
 
 /**
  * Hero Component

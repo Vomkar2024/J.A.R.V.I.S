@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './css/BrainTerminal.css';
+import 'component/core/css/BrainTerminal.css';
 
 /**
  * BrainTerminal Component

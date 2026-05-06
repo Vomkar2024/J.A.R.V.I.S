@@ -1,99 +1,62 @@
-# J.A.R.V.I.S - Frontend
+# J.A.R.V.I.S - Frontend UI
 
-**Just A Rather Very Intelligent System**
+**Just A Rather Very Intelligent System - Neural Interface**
 
-A premium, interactive AI assistant interface built with React, designed to provide a cinematic and highly responsive user experience. This project focuses on high-end aesthetics (Glassmorphism, dynamic animations) and real-time interaction through voice and visual feedback.
+A premium, interactive AI assistant interface built with **React**, designed to provide a cinematic and highly responsive user experience. This interface serves as the primary touchpoint for interacting with the J.A.R.V.I.S core.
 
 ---
 
 ## 🚀 Key Features
 
-### 1. **Interactive AI Core (The Blob)**
-- A dynamic, fluid visual representation of J.A.R.V.I.S.
-- **Voice Reactive**: The blob's size and animation intensity respond in real-time to microphone input volume.
-- **Customizable**: Users can adjust the color (e.g., Fire Orange, Arc Reactor Blue), size, and responsiveness.
-- **Draggable**: Enable "Drag Mode" to reposition the AI core anywhere on the interface.
+### 1. **Interactive AI Core (FireAIBlob)**
+- **Visual Engine**: Built with Three.js (WebGL).
+- **Voice Reactive**: Animates and pulses based on real-time microphone volume.
+- **Customizable**: Change colors, scale, and sensitivity via the Neural Interface settings.
 
-### 2. **Cinematic Splash Screen**
-- High-quality GIF integration for a professional "startup" feel.
-- **Text Reveal Effect**: Smooth "J.A.R.V.I.S" text animation during initialization.
-- Automatic transition to the main dashboard after system "calibration."
+### 2. **Neural Terminals**
+- **BrainTerminal**: Displays live AI thinking states and types out responses with a futuristic terminal effect.
+- **VoiceControl**: Shows real-time user transcription (subtitles) as you speak.
+- **TranslationTerminal**: Automatic detection and display of language translations.
 
-### 3. **Real-time Voice Control**
-- Integrated **Web Speech API** for instant speech-to-text transcription.
-- Visual feedback via a dedicated Voice Control component that displays transcripts as you speak.
-- Seamless start/stop functionality via the main navigation bar.
-
-### 4. **Settings & Persistence**
-- **Glassmorphism Navbar**: A modern, translucent control panel for all system settings.
-- **Persistent Memory**: System configurations (colors, sensitivity, position) are saved to `localStorage`, ensuring your preferences remain even after a page reload.
-- **Quick Reset**: One-click functionality to return J.A.R.V.I.S to its default "Fire Orange" state.
-
-### 5. **Premium UI/UX**
-- **Hero Section**: A sleek welcome message that greets users upon entry.
-- **Dynamic Backgrounds**: High-resolution imagery with smooth transitions.
-- **Responsive Design**: Optimized for various screen sizes with a focus on immersive desktop usage.
+### 3. **Cinematic UX**
+- **Startup Sequence**: A high-fidelity splash screen that initializes system resources.
+- **Glassmorphism**: Sleek, translucent UI elements following modern design standards.
+- **Absolute Imports**: Clean codebase using absolute paths (e.g., `import Navbar from 'component/Navbar'`).
 
 ---
 
-## 🛠️ Tech Stack
+## 🏗️ Architecture
 
-- **Framework**: [React.js](https://reactjs.org/)
-- **Visuals**: Web Audio API (for voice analysis), CSS3 Animations, HTML5 Canvas (for blob dynamics).
-- **Voice**: Web Speech API (SpeechRecognition).
-- **Styling**: Vanilla CSS with modern techniques (CSS Variables, Flexbox, Grid, Glassmorphism).
+### 🧠 Logic Hooks
+- `useSpeech`: Manages microphone access, volume analysis, and local speech recognition.
+- `useBrain`: Handles all communication with the Python backend and manages AI state.
+
+### 🔌 Services
+- `GroqService`: Direct integration with Groq API for text-based interactions.
+- `TTSService`: Handles audio playback and local speech synthesis fallbacks.
 
 ---
 
 ## 📂 Project Structure
-
 ```
 frontend/
-├── public/              # Static assets
-└── src/
-    ├── component/       # Modular UI components
-    │   ├── blob.js          # Core AI visual engine
-    │   ├── Hero.js          # Welcome greeting section
-    │   ├── Navbar.js        # Settings and navigation control
-    │   ├── SplashScreen.js  # Cinematic intro component
-    │   └── VoiceControl.js  # Speech transcription display
-    ├── img/             # High-res assets (backgrounds, GIFs)
-    ├── App.js           # Main application logic and state management
-    └── index.js         # Entry point
+├── src/
+│   ├── component/
+│   │   ├── core/        # Logic-heavy components (Terminals, VoiceControl)
+│   │   ├── css/         # Global and shared component styling
+│   │   ├── Navbar.js    # System configuration control
+│   │   └── blob.js      # Three.js AI visualizer
+│   ├── hooks/           # Custom React hooks (useBrain, useSpeech)
+│   ├── services/        # API and TTS service layers
+│   ├── App.js           # Main Neural Link controller
+│   └── index.js         # Entry point
+├── .env                 # API URL and Keys
+└── jsconfig.json        # Path mapping for absolute imports
 ```
 
 ---
 
 ## 🚦 Getting Started
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v14 or higher recommended)
-- [NPM](https://www.npmjs.com/)
-
-### Installation
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm start
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-## 📝 Recent Updates
-
-- **Splash Screen V2**: Replaced static text with a high-fidelity GIF and added a smooth transition to the main UI.
-- **Microphone Integration**: Optimized Web Audio analyser for better responsiveness to voice volume.
-- **Draggable UI**: Implemented state-based dragging logic for the AI blob.
-- **Settings Persistence**: Integrated local storage for user preferences.
-
----
-
-*Developed with ❤️ as part of the J.A.R.V.I.S project.*
+1. Install dependencies: `npm install`
+2. Configure `.env` with `REACT_APP_API_URL`.
+3. Start the interface: `npm start`

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import GroqService from '../services/GroqService';
-import TTSService from '../services/TTSService';
+import GroqService from 'services/GroqService';
+import TTSService from 'services/TTSService';
 
 /**
  * useBrain Hook
@@ -21,48 +21,76 @@ export const useBrain = (lastProcessedTextRef) => {
     setShowTerminal(true);
     setAiResponse('');
 
-    const response = await GroqService.askJarvis(text);
-    
-    setAiResponse(response);
-    setIsThinking(false);
-    TTSService.speak(response);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const data = await response.json();
+      const aiMsg = data.response;
+      
+      setAiResponse(aiMsg);
+      setIsThinking(false);
+      
+      // Get TTS for this response
+      const ttsRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: aiMsg })
+      });
+      const audioBlob = await ttsRes.blob();
+      TTSService.playAudio(audioBlob);
+    } catch (error) {
+      console.error('Brain Link Error:', error);
+      setIsThinking(false);
+    }
   }, [lastProcessedTextRef]);
 
   const translateText = useCallback(async (text, audioBlob = null) => {
     if ((!text || text.trim().length < 3) && !audioBlob) return;
 
     try {
-      if (audioBlob && window.puter) {
+      if (audioBlob) {
         setIsProcessing(true);
-        const result = await window.puter.ai.speech2txt({
-          file: audioBlob,
-          model: 'gpt-4o-transcribe',
-          translate: true
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'voice.webm');
+
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/process-audio`, {
+          method: 'POST',
+          body: formData
         });
 
-        if (result && result.text) {
+        if (response.ok) {
+          const blob = await response.blob();
+          const userText = response.headers.get('X-User-Text');
+          const aiResponse = response.headers.get('X-AI-Response');
+
           setTranslationData({
-            originalText: text || "Neural Detection Active",
-            translatedText: result.text,
-            detectedLang: "UNIVERSAL AI"
+            originalText: "Voice Signal",
+            translatedText: userText,
+            detectedLang: "JARVIS CORE"
           });
           
-          handleBrainInteraction(result.text);
+          setAiResponse(aiResponse);
+          setIsThinking(false);
+          TTSService.playAudio(blob);
+          setShowTerminal(true);
         }
         setIsProcessing(false);
         return;
       }
 
-      // Fallback Google Translate
+      // Fallback for text translation (Google Translate)
       const GOOGLE_TRANSLATE_API = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=';
       const url = `${GOOGLE_TRANSLATE_API}${encodeURIComponent(text)}`;
-      const response = await fetch(url);
-      const data = await response.json();
+      const resp = await fetch(url);
+      const data = await resp.json();
       
       if (data && data[0]) {
         const translated = data[0].map(item => item[0]).join('');
         const detectedLang = data[2];
-        if (detectedLang && detectedLang !== 'en' && detectedLang !== 'en-US') {
+        if (detectedLang && detectedLang !== 'en') {
           setTranslationData({
             originalText: text,
             translatedText: translated,

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import './css/Navbar.css';
+import 'component/css/Navbar.css';
 
 /**
  * Navbar Component

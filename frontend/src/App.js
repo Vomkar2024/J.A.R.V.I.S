@@ -3,19 +3,19 @@ import background from './img/background.jpeg';
 import './App.css';
 
 // Components
-import Navbar from './component/Navbar';
-import FireAIBlob from './component/blob';
-import SplashScreen from './component/SplashScreen';
-import Hero from './component/Hero';
-import VoiceControl from './component/core/VoiceControl';
-import BrainTerminal from './component/core/BrainTerminal';
-import PuterStatus from './component/PuterStatus';
-import SystemAlert from './component/SystemAlert';
-import SystemStatus from './component/SystemStatus';
+import Navbar from 'component/Navbar';
+import FireAIBlob from 'component/blob';
+import SplashScreen from 'component/SplashScreen';
+import Hero from 'component/Hero';
+import VoiceControl from 'component/core/VoiceControl';
+import BrainTerminal from 'component/core/BrainTerminal';
+import PuterStatus from 'component/PuterStatus';
+import SystemAlert from 'component/SystemAlert';
+import SystemStatus from 'component/SystemStatus';
 
 // Hooks
-import { useSpeech } from './hooks/useSpeech';
-import { useBrain } from './hooks/useBrain';
+import { useSpeech } from 'hooks/useSpeech';
+import { useBrain } from 'hooks/useBrain';
 
 /**
  * DEFAULT_SETTINGS

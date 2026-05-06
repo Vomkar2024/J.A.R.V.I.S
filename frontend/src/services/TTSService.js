@@ -10,18 +10,17 @@ const TTSService = {
    * Converts text to humanoid speech.
    */
   speak(text) {
-    if (!text || !window.speechSynthesis) return;
+    if (!text) return;
+    
+    // Check if we should use backend TTS (ultra realistic)
+    // For now, we'll keep the Web Speech API as a fallback 
+    // but the main flow will use playAudioFromBackend.
+    if (!window.speechSynthesis) return;
 
-    // Stop any current speech
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(text);
     
     const startSpeech = (voices) => {
-      // Priority List for "Humanoid" feel:
-      // 1. Google US English (Very clear)
-      // 2. Microsoft Guy/Aria (Neural-like)
-      // 3. Apple Samantha
       const preferredVoice = voices.find(v => 
         v.name.includes('Google US English') || 
         v.name.includes('Neural') ||
@@ -29,29 +28,35 @@ const TTSService = {
         v.name.includes('Samantha')
       ) || voices.find(v => v.lang.startsWith('en'));
 
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-
-      // Modern humanoid characteristics
+      if (preferredVoice) utterance.voice = preferredVoice;
       utterance.pitch = 1.0;
       utterance.rate = 1.0; 
       utterance.volume = 1.0;
-
       window.speechSynthesis.speak(utterance);
     };
 
     let voices = window.speechSynthesis.getVoices();
     if (voices.length === 0) {
-      // Fallback for browsers that load voices asynchronously
       window.speechSynthesis.onvoiceschanged = () => {
         voices = window.speechSynthesis.getVoices();
         startSpeech(voices);
-        window.speechSynthesis.onvoiceschanged = null; // Clean up
+        window.speechSynthesis.onvoiceschanged = null;
       };
     } else {
       startSpeech(voices);
     }
+  },
+
+  /**
+   * playAudio
+   * Plays an audio blob returned from the backend.
+   */
+  playAudio(audioBlob) {
+    if (!audioBlob) return;
+    const url = URL.createObjectURL(audioBlob);
+    const audio = new Audio(url);
+    audio.play();
+    return audio;
   }
 };
 

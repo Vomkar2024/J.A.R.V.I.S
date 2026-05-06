@@ -1,5 +1,5 @@
 import React from 'react';
-import './css/VoiceControl.css';
+import 'component/core/css/VoiceControl.css';
 
 /**
  * VoiceControl Component

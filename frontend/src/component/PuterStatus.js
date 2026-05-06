@@ -1,5 +1,5 @@
 import React from 'react';
-import './css/PuterStatus.css';
+import 'component/css/PuterStatus.css';
 
 /**
  * PuterStatus Component

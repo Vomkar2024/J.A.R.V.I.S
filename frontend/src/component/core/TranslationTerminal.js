@@ -1,5 +1,5 @@
 import React from 'react';
-import './css/TranslationTerminal.css';
+import 'component/core/css/TranslationTerminal.css';
 
 /**
  * TranslationTerminal Component
