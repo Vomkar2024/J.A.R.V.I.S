@@ -1,18 +1,24 @@
 import { useState, useCallback } from 'react';
-import GroqService from 'backend/services/GroqService';
-import TTSService from 'backend/services/TTSService';
+
+import TTSService from '../services/TTSService';
 
 /**
  * useBrain Hook
  * Handles AI interactions and translations.
  */
 export const useBrain = (lastProcessedTextRef) => {
-  const [translationData, setTranslationData] = useState(null);
-  const [aiResponse, setAiResponse] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [showTerminal, setShowTerminal] = useState(false);
+  // --- Neural State ---
+  const [translationData, setTranslationData] = useState(null); // Stores cross-language translation logs
+  const [aiResponse, setAiResponse] = useState('');           // Stores the latest string from JARVIS
+  const [isThinking, setIsThinking] = useState(false);        // UI flag for LLM processing
+  const [isProcessing, setIsProcessing] = useState(false);    // UI flag for Audio/STT processing
+  const [showTerminal, setShowTerminal] = useState(false);    // Controls terminal visibility
 
+  /**
+   * handleBrainInteraction
+   * Processes a text prompt by sending it to the JARVIS backend,
+   * receiving a response, and automatically triggering the TTS playback.
+   */
   const handleBrainInteraction = useCallback(async (text) => {
     if (!text || text.trim().length < 4 || text === lastProcessedTextRef.current) return;
     
@@ -27,11 +33,13 @@ export const useBrain = (lastProcessedTextRef) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
       });
+      
+      if (!response.ok) throw new Error('Brain uplink failed');
+      
       const data = await response.json();
       const aiMsg = data.response;
       
       setAiResponse(aiMsg);
-      setIsThinking(false);
       
       // Get TTS for this response
       const ttsRes = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/tts`, {
@@ -39,14 +47,25 @@ export const useBrain = (lastProcessedTextRef) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: aiMsg })
       });
-      const audioBlob = await ttsRes.blob();
-      TTSService.playAudio(audioBlob);
+      
+      if (ttsRes.ok) {
+        const audioBlob = await ttsRes.blob();
+        TTSService.playAudio(audioBlob);
+      }
     } catch (error) {
       console.error('Brain Link Error:', error);
+      setAiResponse('SYSTEM_ERROR: Neural connection unstable.');
+    } finally {
       setIsThinking(false);
     }
   }, [lastProcessedTextRef]);
 
+  /**
+   * translateText
+   * Dual-purpose function that handles:
+   * 1. Real-time audio processing (full STT -> LLM -> TTS cycle)
+   * 2. Text translation fallback via Google Translate API
+   */
   const translateText = useCallback(async (text, audioBlob = null) => {
     if ((!text || text.trim().length < 3) && !audioBlob) return;
 
@@ -64,20 +83,18 @@ export const useBrain = (lastProcessedTextRef) => {
         if (response.ok) {
           const blob = await response.blob();
           const userText = response.headers.get('X-User-Text');
-          const aiResponse = response.headers.get('X-AI-Response');
+          const aiResponseText = response.headers.get('X-AI-Response');
 
           setTranslationData({
             originalText: "Voice Signal",
-            translatedText: userText,
+            translatedText: userText || "Audio signal processed",
             detectedLang: "JARVIS CORE"
           });
           
-          setAiResponse(aiResponse);
-          setIsThinking(false);
+          setAiResponse(aiResponseText || "");
           TTSService.playAudio(blob);
           setShowTerminal(true);
         }
-        setIsProcessing(false);
         return;
       }
 
@@ -85,6 +102,9 @@ export const useBrain = (lastProcessedTextRef) => {
       const GOOGLE_TRANSLATE_API = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=';
       const url = `${GOOGLE_TRANSLATE_API}${encodeURIComponent(text)}`;
       const resp = await fetch(url);
+      
+      if (!resp.ok) return;
+      
       const data = await resp.json();
       
       if (data && data[0]) {
@@ -101,9 +121,11 @@ export const useBrain = (lastProcessedTextRef) => {
       }
     } catch (error) {
       console.error('Neural glitch:', error);
+    } finally {
       setIsProcessing(false);
+      setIsThinking(false);
     }
-  }, [handleBrainInteraction]);
+  }, []);
 
   return {
     translationData,
@@ -113,7 +135,6 @@ export const useBrain = (lastProcessedTextRef) => {
     showTerminal,
     setShowTerminal,
     handleBrainInteraction,
-    translateText,
-    setAiResponse
+    translateText
   };
 };

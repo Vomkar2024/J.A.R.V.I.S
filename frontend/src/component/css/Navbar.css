@@ -30,6 +30,42 @@
     text-transform: uppercase;
 }
 
+.status-indicator {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0.4rem;
+}
+
+.status-text {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 2px;
+    font-family: var(--futuristic);
+}
+
+.pulse {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: #ff2d00;
+    border-radius: 50%;
+    margin-right: 8px;
+    box-shadow: 0 0 10px #ff2d00;
+}
+
+.pulse.active {
+    background: #00ffcc;
+    box-shadow: 0 0 15px #00ffcc;
+    animation: statusPulse 1.5s infinite;
+}
+
+@keyframes statusPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
 .settings-trigger {
     background: none;
     border: none;
@@ -302,3 +338,65 @@
     background: rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
 }
+
+/* Nexus Info Panel */
+.nexus-info {
+    position: absolute;
+    top: calc(100% + 2rem);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid var(--fire-orange);
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 107, 0, 0.2);
+    z-index: 1001;
+    width: 300px;
+    color: #f8fafc;
+    backdrop-filter: blur(20px);
+    animation: fadeIn 0.3s ease-out;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    text-align: left;
+}
+
+.nav-item:hover .nexus-info {
+    opacity: 1;
+    visibility: visible;
+    top: calc(100% + 1rem);
+}
+
+.nexus-info::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border-left: 1px solid var(--fire-orange);
+    border-top: 1px solid var(--fire-orange);
+}
+
+.nexus-title {
+    color: var(--fire-yellow);
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    margin-bottom: 0.8rem;
+    display: block;
+    border-bottom: 1px solid rgba(255, 204, 0, 0.2);
+    padding-bottom: 0.5rem;
+    font-family: var(--futuristic);
+}
+
+.nexus-desc {
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.8);
+    font-family: var(--sans);
+    margin: 0;
+}
+

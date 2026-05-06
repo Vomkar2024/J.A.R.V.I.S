@@ -15,7 +15,7 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
   const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const streamRef = useRef(null);
   const isListeningRef = useRef(false);
 
   useEffect(() => {
@@ -52,9 +52,13 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
       };
 
       recognition.onend = () => {
-        if (isListeningRef.current) {
-          try { recognition.start(); } catch (e) {
-            console.error('Recognition restart failed:', e);
+        // Only restart if we're still supposed to be listening
+        if (isListeningRef.current && recognitionRef.current) {
+          try { 
+            recognitionRef.current.start(); 
+          } catch (e) {
+            // Ignore error if already started
+            if (e.error !== 'no-speech') console.error('Recognition restart failed:', e);
           }
         }
       };
@@ -68,6 +72,7 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setPermissionGranted(true);
+      streamRef.current = stream;
       
       // Audio Analysis setup
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -78,16 +83,17 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
 
       // Recorder setup
       const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      const chunks = [];
+      
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        if (audioChunksRef.current.length > 0 && onAudioBlobReady) {
+        if (chunks.length > 0 && onAudioBlobReady) {
+          const audioBlob = new Blob(chunks, { type: 'audio/wav' });
           onAudioBlobReady(audioBlob);
         }
-        audioChunksRef.current = [];
       };
-      recorder.start(5000); // 5s neural chunks
+      
+      recorder.start(5000); // 5s chunks
       mediaRecorderRef.current = recorder;
 
       // Volume tracking
@@ -109,7 +115,9 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
 
       updateVolume();
       setIsListening(true);
-      if (recognitionRef.current) recognitionRef.current.start();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch (e) { /* ignore */ }
+      }
       
       return true;
     } catch (err) {
@@ -121,19 +129,28 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
   }, [onAudioBlobReady]);
 
   const stopSpeech = useCallback(() => {
-    if (recognitionRef.current) recognitionRef.current.stop();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    
-    // Close AudioContext to release hardware resources
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-    }
-    
+    isListeningRef.current = false;
     setIsListening(false);
     setVolume(0);
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) { /* ignore */ }
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(e => console.error('AudioContext close error:', e));
+    }
   }, []);
 
   return {

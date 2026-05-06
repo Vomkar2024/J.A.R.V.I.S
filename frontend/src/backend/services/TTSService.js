@@ -4,20 +4,22 @@
  * Uses the Web Speech API as a high-volume, free fallback, 
  * with logic to prefer high-quality "Neural" voices if available.
  */
+let currentAudio = null;
+
 const TTSService = {
   /**
    * speak
-   * Converts text to humanoid speech.
+   * Converts text to humanoid speech via Web Speech API (fallback).
    */
   speak(text) {
-    if (!text) return;
+    if (!text || !window.speechSynthesis) return;
     
-    // Check if we should use backend TTS (ultra realistic)
-    // For now, we'll keep the Web Speech API as a fallback 
-    // but the main flow will use playAudioFromBackend.
-    if (!window.speechSynthesis) return;
-
     window.speechSynthesis.cancel();
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
     
     const startSpeech = (voices) => {
@@ -49,13 +51,27 @@ const TTSService = {
 
   /**
    * playAudio
-   * Plays an audio blob returned from the backend.
+   * Plays an audio blob returned from the backend (primary).
    */
   playAudio(audioBlob) {
     if (!audioBlob) return;
+    
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+
     const url = URL.createObjectURL(audioBlob);
     const audio = new Audio(url);
-    audio.play();
+    currentAudio = audio;
+    
+    audio.play().catch(e => console.warn('Audio playback interrupted:', e));
+    
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+    };
+    
     return audio;
   }
 };

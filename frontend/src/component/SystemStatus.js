@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import 'component/css/SystemStatus.css';
+import './css/SystemStatus.css';
 
 /**
  * SystemStatus Component

@@ -1,15 +1,23 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import 'component/css/Navbar.css';
+import './css/Navbar.css';
 
 /**
  * Navbar Component
- * This is the main navigation bar at the top of the screen.
- * It contains the logo, settings menu, and volume visualizer.
+ * Restored to the version shown in the user's latest screenshot.
+ * Includes HOME, CORE, NEXUS, SETTINGS links and a streamlined INITIALIZE button.
  */
 function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
   const menuRef = useRef(null);
+
+  const handleToggleMenu = useCallback((e) => {
+    e.preventDefault();
+    setIsMenuOpen(prev => !prev);
+  }, []);
+
+  const handleCloseMenu = useCallback(() => {
+    setIsMenuOpen(false);
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -24,22 +32,6 @@ function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen, handleCloseMenu]);
 
-  const handleOpenMenu = useCallback(() => {
-    setIsMenuOpen(true);
-    setIsClosing(false);
-    setBlobSettings(prev => ({ ...prev, position: { x: 85, y: 85 }, size: 0.5 }));
-  }, [setBlobSettings]);
-
-  const handleCloseMenu = useCallback(() => {
-    setIsClosing(true);
-    setTimeout(() => {
-      setIsMenuOpen(false);
-      setIsClosing(false);
-      // When settings close, the AI blob returns to center
-      setBlobSettings(prev => ({ ...prev, position: { x: 50, y: 50 }, size: 0.8 }));
-    }, 500); // Wait for the retraction animation
-  }, [setBlobSettings]);
-
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setBlobSettings(prev => ({
@@ -50,76 +42,61 @@ function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
 
   return (
     <nav className={`navbar ${showHero ? 'hidden' : ''}`}>
-      <div className="nav-container">
-        {/* J.A.R.V.I.S Logo and Status */}
-        <div className="nav-brand">
-          <div className="logo-glow"></div>
-          <h1 className="nav-title">J.A.R.V.I.S</h1>
-          <div className="status-indicator">
-            <span className={`pulse ${isListening ? 'active' : ''}`}></span>
-            <span className="status-text">{isListening ? 'SYSTEM_ACTIVE' : 'SYSTEM_STANDBY'}</span>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="nav-controls">
-          <button 
-            className={`action-btn ${isListening ? 'active' : ''}`}
-            onClick={isListening ? onStop : onInitialize}
-          >
-            {isListening ? 'STOP_LINK' : 'INITIALIZE_LINK'}
-            <div className="btn-border"></div>
-          </button>
-
-          <button className="settings-toggle" onClick={handleOpenMenu}>
-            <span className="settings-icon">⚙</span>
-          </button>
-        </div>
+      <div className="nav-logo" onClick={() => window.location.reload()}>
+        J.A.R.V.I.S
       </div>
 
-      {/* Futuristic Retractable Settings Menu */}
-      {isMenuOpen && (
-        <div className={`settings-overlay ${isClosing ? 'closing' : ''}`}>
-          <div className={`settings-menu ${isClosing ? 'retract' : 'expand'}`} ref={menuRef}>
-            <div className="menu-header">
-              <h2>SYSTEM_CONFIG</h2>
-              <button className="close-btn" onClick={handleCloseMenu}>×</button>
-            </div>
-            
-            <div className="menu-body">
-              <div className="setting-group">
-                <label>NEURAL_COLOR</label>
-                <div className="color-picker-wrapper">
-                  <input type="color" name="color" value={blobSettings.color} onChange={handleChange} />
-                  <span className="color-value">{blobSettings.color.toUpperCase()}</span>
+      <ul className="nav-links">
+        <li className="nav-item"><a href="#home" className="nav-link">HOME</a></li>
+        <li className="nav-item"><a href="#core" className="nav-link">CORE</a></li>
+        <li className="nav-item"><a href="#nexus" className="nav-link">NEXUS</a></li>
+        <li className="nav-item" style={{ position: 'relative' }}>
+          <a href="#settings" className="nav-link" onClick={handleToggleMenu}>SETTINGS</a>
+          {isMenuOpen && (
+            <div className="settings-panel" ref={menuRef}>
+              <h2 className="settings-title">SYSTEM_CONFIG</h2>
+
+              <div className="settings-group">
+                <div className="label-with-value">
+                  <label>NEURAL_COLOR</label>
+                  <span className="setting-value">{blobSettings.color.toUpperCase()}</span>
                 </div>
+                <input type="color" name="color" value={blobSettings.color} onChange={handleChange} />
               </div>
 
-              <div className="setting-group">
-                <label>CORE_SCALE</label>
+              <div className="settings-group">
+                <div className="label-with-value">
+                  <label>CORE_SCALE</label>
+                  <span className="setting-value">{Math.round(blobSettings.size * 100)}%</span>
+                </div>
                 <input type="range" name="size" min="0.3" max="2" step="0.1" value={blobSettings.size} onChange={handleChange} />
-                <span className="range-value">{Math.round(blobSettings.size * 100)}%</span>
               </div>
 
-              <div className="setting-group">
-                <label>MIC_SENSITIVITY</label>
+              <div className="settings-group">
+                <div className="label-with-value">
+                  <label>MIC_SENSITIVITY</label>
+                  <span className="setting-value">{blobSettings.sensitivity}x</span>
+                </div>
                 <input type="range" name="sensitivity" min="0.1" max="2" step="0.1" value={blobSettings.sensitivity} onChange={handleChange} />
-                <span className="range-value">{blobSettings.sensitivity}x</span>
               </div>
 
-              <div className="menu-actions">
-                <button className="save-btn" onClick={onSave}>COMMIT_CHANGES</button>
-                <button className="reset-btn" onClick={onReset}>RESET_DEFAULTS</button>
+              <div className="settings-actions">
+                <button className="btn-save" onClick={() => { onSave(); handleCloseMenu(); }}>SAVE CHANGES</button>
+                <button className="btn-reset" onClick={onReset}>RESET</button>
               </div>
             </div>
+          )}
+        </li>
+      </ul>
 
-            <div className="menu-footer">
-              <span className="serial-no">SN: 884-JAR-01</span>
-              <span className="version">V4.0.2</span>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="nav-actions">
+        <button
+          className={`btn-launch ${isListening ? 'listening' : ''}`}
+          onClick={isListening ? onStop : onInitialize}
+        >
+          {isListening ? 'STOP' : 'INITIALIZE'}
+        </button>
+      </div>
     </nav>
   );
 }

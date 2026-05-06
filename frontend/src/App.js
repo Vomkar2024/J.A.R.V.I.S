@@ -3,19 +3,19 @@ import background from './img/background.jpeg';
 import './App.css';
 
 // Components
-import Navbar from 'component/Navbar';
-import FireAIBlob from 'component/blob';
-import SplashScreen from 'component/SplashScreen';
-import Hero from 'component/Hero';
-import VoiceControl from 'backend/core/VoiceControl';
-import BrainTerminal from 'backend/core/BrainTerminal';
-import PuterStatus from 'component/PuterStatus';
-import SystemAlert from 'component/SystemAlert';
-import SystemStatus from 'component/SystemStatus';
+import Navbar from './component/Navbar';
+import FireAIBlob from './component/blob';
+import SplashScreen from './component/SplashScreen';
+import Hero from './component/Hero';
+import VoiceControl from './backend/core/VoiceControl';
+import BrainTerminal from './backend/core/BrainTerminal';
+import PuterStatus from './component/PuterStatus';
+import SystemAlert from './component/SystemAlert';
+import SystemStatus from './component/SystemStatus';
 
 // Hooks
-import { useSpeech } from 'backend/hooks/useSpeech';
-import { useBrain } from 'backend/hooks/useBrain';
+import { useSpeech } from './backend/hooks/useSpeech';
+import { useBrain } from './backend/hooks/useBrain';
 
 /**
  * DEFAULT_SETTINGS
@@ -30,8 +30,12 @@ const DEFAULT_SETTINGS = {
 };
 
 /**
- * App Component
- * Main application controller for J.A.R.V.I.S.
+ * J.A.R.V.I.S - Core Application
+ * 
+ * Main controller that orchestrates:
+ * - Voice Input (useSpeech)
+ * - AI Logic (useBrain)
+ * - UI Components (Navbar, Terminals, Status)
  */
 function App() {
   // --- State ---
@@ -45,10 +49,20 @@ function App() {
   // --- Refs ---
   const lastProcessedTextRef = useRef('');
 
+  const {
+    translationData,
+    aiResponse,
+    isThinking,
+    isProcessing,
+    showTerminal,
+    setShowTerminal,
+    translateText
+  } = useBrain(lastProcessedTextRef);
+
   // --- Custom Hooks ---
   const onAudioBlobReady = useCallback((blob) => {
     translateText(null, blob);
-  }, []);
+  }, [translateText]);
 
   const {
     isListening,
@@ -59,29 +73,22 @@ function App() {
     stopSpeech
   } = useSpeech(setTranscript, onAudioBlobReady);
 
-  const {
-    translationData,
-    aiResponse,
-    isThinking,
-    isProcessing,
-    showTerminal,
-    setShowTerminal,
-    translateText,
-    setAiResponse
-  } = useBrain(lastProcessedTextRef);
-
-  // --- Effects ---
+  // --- System Initialization ---
   
-  // Load settings from localStorage
+  // Load settings from persistent storage
   useEffect(() => {
     try {
       const saved = localStorage.getItem('blobSettings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        setBlobSettings(prev => ({ ...prev, ...parsed, isDraggable: false }));
+        setBlobSettings(prev => ({ 
+          ...prev, 
+          ...parsed, 
+          isDraggable: false // Always start non-draggable for stability
+        }));
       }
     } catch (error) {
-      console.warn('Failed to load blob settings:', error);
+      console.warn('System Memory: Failed to load user config', error);
     }
   }, []);
 
@@ -103,14 +110,20 @@ function App() {
     }
   }, [isLoading]);
 
-  // --- Handlers ---
+  // --- Interaction Handlers ---
   
   const handleSplashComplete = useCallback(() => setIsLoading(false), []);
 
   const handleInitialize = useCallback(async () => {
-    const success = await startSpeech();
-    if (success) {
-      setAlert({ message: 'Neural Link Established', isVisible: true });
+    try {
+      const success = await startSpeech();
+      if (success) {
+        setAlert({ message: 'Neural Link Established', isVisible: true });
+      } else {
+        setAlert({ message: 'Neural Link Failed: Check Permissions', isVisible: true });
+      }
+    } catch (error) {
+      console.error('System Crash during initialization:', error);
     }
   }, [startSpeech]);
 
@@ -129,6 +142,10 @@ function App() {
     setBlobSettings(DEFAULT_SETTINGS);
     setAlert({ message: 'All settings are reset', isVisible: true });
     localStorage.removeItem('blobSettings');
+  }, []);
+
+  const handleAlertComplete = useCallback(() => {
+    setAlert(prev => ({ ...prev, isVisible: false }));
   }, []);
 
   // Mouse Interactivity for Blob
@@ -210,7 +227,7 @@ function App() {
         <SystemAlert 
           message={alert.message} 
           isVisible={alert.isVisible} 
-          onComplete={() => setAlert(prev => ({ ...prev, isVisible: false }))} 
+          onComplete={handleAlertComplete} 
         />
 
         <img src={background} className="bg-image" alt="System Background" />

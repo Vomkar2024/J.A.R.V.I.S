@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import 'component/css/SystemAlert.css';
+import React, { useEffect, useState, useRef } from 'react';
+import './css/SystemAlert.css';
 
 /**
  * SystemAlert Component
@@ -8,16 +8,21 @@ import 'component/css/SystemAlert.css';
 const SystemAlert = ({ message, isVisible, onComplete }) => {
   const [shouldRender, setShouldRender] = useState(isVisible);
 
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+
   useEffect(() => {
     if (isVisible) {
       setShouldRender(true);
       const timer = setTimeout(() => {
         setShouldRender(false);
-        if (onComplete) onComplete();
-      }, 3000); // Alert lasts for 3 seconds
+        if (onCompleteRef.current) onCompleteRef.current();
+      }, 5000);
       return () => clearTimeout(timer);
+    } else {
+      setShouldRender(false);
     }
-  }, [isVisible, onComplete]);
+  }, [isVisible]);
 
   if (!shouldRender) return null;
 

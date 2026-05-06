@@ -1,0 +1,95 @@
+import os
+import uuid
+import asyncio
+import aiofiles
+from groq import Groq
+import edge_tts
+
+class JarvisProcessor:
+    """
+    JarvisProcessor
+    The neural engine of J.A.R.V.I.S.
+    Handles STT (Groq Whisper), LLM (Groq Llama), and TTS (Edge TTS).
+    """
+    def __init__(self):
+        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp")
+        os.makedirs(self.temp_dir, exist_ok=True)
+        
+        # System Prompt for J.A.R.V.I.S personality
+        self.system_prompt = (
+            "You are J.A.R.V.I.S., a highly intelligent, witty, and sophisticated AI assistant "
+            "created by Tony Stark (but currently serving the user). Your tone is professional, "
+            "slightly sarcastic but always helpful and loyal. Keep your responses concise and efficient."
+        )
+
+    async def speech_to_text(self, audio_content: bytes, extension: str) -> str:
+        """Transcribes audio using Groq Whisper-Large-V3."""
+        temp_filename = f"stt_{uuid.uuid4()}.{extension}"
+        temp_path = os.path.join(self.temp_dir, temp_filename)
+        
+        try:
+            async with aiofiles.open(temp_path, mode='wb') as f:
+                await f.write(audio_content)
+            
+            with open(temp_path, "rb") as file:
+                transcription = self.client.audio.transcriptions.create(
+                    file=(temp_filename, file.read()),
+                    model="whisper-large-v3",
+                    response_format="text",
+                    language="en"
+                )
+            return transcription
+        except Exception as e:
+            print(f"STT Error: {e}")
+            return ""
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    async def ask_llm(self, text: str) -> str:
+        """Gets a response from Groq Llama 3.3 70B."""
+        try:
+            completion = self.client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                temperature=0.7,
+                max_tokens=1024,
+                stream=False
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"LLM Error: {e}")
+            return "I'm sorry, sir. I'm having trouble accessing my neural network at the moment."
+
+    async def text_to_speech(self, text: str) -> str:
+        """Converts text to audio using Edge TTS (Microsoft Ryan Neural)."""
+        temp_filename = f"tts_{uuid.uuid4()}.mp3"
+        temp_path = os.path.join(self.temp_dir, temp_filename)
+        
+        try:
+            # Using RyanNeural for that sophisticated British-adjacent tone
+            communicate = edge_tts.Communicate(text, "en-GB-RyanNeural")
+            await communicate.save(temp_path)
+            return temp_path
+        except Exception as e:
+            print(f"TTS Error: {e}")
+            return ""
+
+    async def process_full_cycle(self, audio_content: bytes):
+        """Orchestrates the full Audio -> Text -> LLM -> Audio pipeline."""
+        # 1. STT
+        user_text = await self.speech_to_text(audio_content, "webm") # Default to webm from browser
+        if not user_text or len(user_text.strip()) < 2:
+            return None, None, None
+            
+        # 2. LLM
+        ai_response = await self.ask_llm(user_text)
+        
+        # 3. TTS
+        audio_path = await self.text_to_speech(ai_response)
+        
+        return user_text, ai_response, audio_path
