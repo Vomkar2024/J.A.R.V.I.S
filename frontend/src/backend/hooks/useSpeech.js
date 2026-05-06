@@ -5,9 +5,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
  * Encapsulates Speech Recognition, Audio Analysis, and Microphone permissions.
  */
 export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
+  // --- Audio State ---
   const [isListening, setIsListening] = useState(false);
-  const [volume, setVolume] = useState(0);
-  const [isSupported, setIsSupported] = useState(true);
+  const [volume, setVolume] = useState(0);                   // Real-time voice intensity
+  const [isSupported, setIsSupported] = useState(true);       // Browser compatibility flag
   const [permissionGranted, setPermissionGranted] = useState(false);
   
   const recognitionRef = useRef(null);
@@ -68,6 +69,11 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
     }
   }, [onTranscriptChange]);
 
+  /**
+   * startSpeech
+   * Initializes the microphone, audio analyzer, and media recorder.
+   * Also starts the speech recognition engine.
+   */
   const startSpeech = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -128,6 +134,14 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
     }
   }, [onAudioBlobReady]);
 
+  /**
+   * stopSpeech
+   * Gracefully shuts down all audio resources including:
+   * - Speech Recognition
+   * - Media Recorder
+   * - Media Stream Tracks (Microphone)
+   * - Audio Context & Animation Frames
+   */
   const stopSpeech = useCallback(() => {
     isListeningRef.current = false;
     setIsListening(false);
