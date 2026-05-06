@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import GroqService from 'services/GroqService';
-import TTSService from 'services/TTSService';
+import GroqService from 'backend/services/GroqService';
+import TTSService from 'backend/services/TTSService';
 
 /**
  * useBrain Hook
