@@ -10,6 +10,7 @@ class JarvisProcessor:
     JarvisProcessor
     The neural engine of J.A.R.V.I.S.
     Handles STT (Groq Whisper), LLM (Groq Llama), and TTS (Edge TTS).
+    Optimized for real-time streaming.
     """
     def __init__(self):
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -20,11 +21,23 @@ class JarvisProcessor:
         self.system_prompt = (
             "You are J.A.R.V.I.S., a highly intelligent, witty, and sophisticated AI assistant "
             "created by Tony Stark (but currently serving the user). Your tone is professional, "
-            "slightly sarcastic but always helpful and loyal. Keep your responses concise and efficient."
+            "slightly sarcastic but always helpful and loyal. Keep your responses concise and efficient. "
+            "Respond in 2-3 sentences maximum for voice conversations."
         )
+        
+        # Conversation memory (last N exchanges)
+        self.conversation_history = []
+        self.max_history = 10
+
+    def _add_to_history(self, role: str, content: str):
+        """Add a message to conversation history."""
+        self.conversation_history.append({"role": role, "content": content})
+        # Trim to max history
+        if len(self.conversation_history) > self.max_history * 2:
+            self.conversation_history = self.conversation_history[-(self.max_history * 2):]
 
     async def speech_to_text(self, audio_content: bytes, extension: str) -> str:
-        """Transcribes audio using Groq Whisper-Large-V3."""
+        """Transcribes audio using Groq Whisper-Large-V3-Turbo (faster)."""
         temp_filename = f"stt_{uuid.uuid4()}.{extension}"
         temp_path = os.path.join(self.temp_dir, temp_filename)
         
@@ -35,7 +48,7 @@ class JarvisProcessor:
             with open(temp_path, "rb") as file:
                 transcription = self.client.audio.translations.create(
                     file=(temp_filename, file.read()),
-                    model="whisper-large-v3",
+                    model="whisper-large-v3-turbo",
                     response_format="text"
                 )
             return transcription
@@ -47,22 +60,61 @@ class JarvisProcessor:
                 os.remove(temp_path)
 
     async def ask_llm(self, text: str) -> str:
-        """Gets a response from Groq Llama 3.3 70B."""
+        """Gets a response from Groq LLM (non-streaming fallback)."""
         try:
+            self._add_to_history("user", text)
+            
+            messages = [{"role": "system", "content": self.system_prompt}]
+            messages.extend(self.conversation_history)
+            
             completion = self.client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": text}
-                ],
+                model="llama-3.1-8b-instant",
+                messages=messages,
                 temperature=0.7,
-                max_tokens=1024,
+                max_tokens=300,
                 stream=False
             )
-            return completion.choices[0].message.content
+            response = completion.choices[0].message.content
+            self._add_to_history("assistant", response)
+            return response
         except Exception as e:
             print(f"LLM Error: {e}")
             return "I'm sorry, sir. I'm having trouble accessing my neural network at the moment."
+
+    def stream_llm(self, text: str):
+        """
+        Streams LLM response token by token (generator).
+        Returns an iterator of text chunks for real-time display.
+        """
+        try:
+            self._add_to_history("user", text)
+            
+            messages = [{"role": "system", "content": self.system_prompt}]
+            messages.extend(self.conversation_history)
+            
+            stream = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=300,
+                stream=True
+            )
+            
+            full_response = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    full_response += token
+                    yield token
+            
+            # Save full response to history after streaming completes
+            self._add_to_history("assistant", full_response)
+            
+        except Exception as e:
+            print(f"LLM Stream Error: {e}")
+            error_msg = "I'm sorry, sir. Neural link interrupted."
+            self._add_to_history("assistant", error_msg)
+            yield error_msg
 
     async def translate_text(self, text: str) -> str:
         """High-accuracy translation specifically tuned for Hinglish/Hindi to English."""
@@ -73,7 +125,7 @@ class JarvisProcessor:
                 f"Text: {text}"
             )
             completion = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant", # Using a faster model for real-time translation
+                model="llama-3.1-8b-instant",
                 messages=[
                     {"role": "system", "content": "You are a professional translator. Output only the translated text."},
                     {"role": "user", "content": prompt}
@@ -101,10 +153,23 @@ class JarvisProcessor:
             print(f"TTS Error: {e}")
             return ""
 
+    async def text_to_speech_bytes(self, text: str) -> bytes:
+        """Converts text to audio bytes using Edge TTS. Returns raw MP3 bytes."""
+        try:
+            communicate = edge_tts.Communicate(text, "en-GB-RyanNeural")
+            audio_data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+            return audio_data
+        except Exception as e:
+            print(f"TTS Bytes Error: {e}")
+            return b""
+
     async def process_full_cycle(self, audio_content: bytes):
         """Orchestrates the full Audio -> Text -> LLM -> Audio pipeline."""
         # 1. STT
-        user_text = await self.speech_to_text(audio_content, "webm") # Default to webm from browser
+        user_text = await self.speech_to_text(audio_content, "webm")
         if not user_text or len(user_text.strip()) < 2:
             return None, None, None
             
@@ -115,3 +180,7 @@ class JarvisProcessor:
         audio_path = await self.text_to_speech(ai_response)
         
         return user_text, ai_response, audio_path
+
+    def clear_history(self):
+        """Clears conversation history."""
+        self.conversation_history = []

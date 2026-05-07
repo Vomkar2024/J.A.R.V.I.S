@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import background from './img/background.jpeg';
 import './App.css';
 
@@ -7,15 +7,15 @@ import Navbar from './component/Navbar';
 import FireAIBlob from './component/blob';
 import SplashScreen from './component/SplashScreen';
 import Hero from './component/Hero';
-import VoiceControl from './backend/core/VoiceControl';
-import BrainTerminal from './backend/core/BrainTerminal';
+import VoiceControl from './component/VoiceControl';
+import BrainTerminal from './component/BrainTerminal';
 import PuterStatus from './component/PuterStatus';
 import SystemAlert from './component/SystemAlert';
 import SystemStatus from './component/SystemStatus';
 
 // Hooks
-import { useSpeech } from './backend/hooks/useSpeech';
-import { useBrain } from './backend/hooks/useBrain';
+import { useSpeech } from './hooks/useSpeech';
+import { useBrain } from './hooks/useBrain';
 
 /**
  * DEFAULT_SETTINGS
@@ -33,8 +33,8 @@ const DEFAULT_SETTINGS = {
  * J.A.R.V.I.S - Core Application
  * 
  * Main controller that orchestrates:
- * - Voice Input (useSpeech)
- * - AI Logic (useBrain)
+ * - Voice Input (useSpeech) — real-time browser speech recognition
+ * - AI Logic (useBrain) — WebSocket streaming to backend
  * - UI Components (Navbar, Terminals, Status)
  */
 function App() {
@@ -46,23 +46,25 @@ function App() {
   const [transcript, setTranscript] = useState('');
   const [alert, setAlert] = useState({ message: '', isVisible: false });
 
-  // --- Refs ---
-  const lastProcessedTextRef = useRef('');
-
+  // --- Brain Hook (WebSocket) ---
   const {
-    translationData,
     aiResponse,
+    streamingText,
     isThinking,
-    isProcessing,
-    showTerminal,
-    setShowTerminal,
-    translateText
-  } = useBrain(lastProcessedTextRef);
+    isSpeaking,
+    isBackendConnected,
+    pipelineState,
+    conversationHistory,
+    sendMessage,
+    clearHistory
+  } = useBrain();
 
-  // --- Custom Hooks ---
-  const onAudioBlobReady = useCallback((blob) => {
-    translateText(null, blob);
-  }, [translateText]);
+  // --- Speech Hook ---
+  const onFinalTranscript = useCallback((text) => {
+    if (text && text.trim().length > 2) {
+      sendMessage(text);
+    }
+  }, [sendMessage]);
 
   const {
     isListening,
@@ -71,7 +73,7 @@ function App() {
     permissionGranted,
     startSpeech,
     stopSpeech
-  } = useSpeech(setTranscript, onAudioBlobReady);
+  } = useSpeech(setTranscript, onFinalTranscript);
 
   // --- System Initialization ---
   
@@ -92,16 +94,6 @@ function App() {
     }
   }, []);
 
-  // Debounced translation trigger
-  useEffect(() => {
-    if (transcript) {
-      const timer = setTimeout(() => translateText(transcript), 800);
-      return () => clearTimeout(timer);
-    } else {
-      setShowTerminal(false);
-    }
-  }, [transcript, translateText, setShowTerminal]);
-
   // Handle hero screen transition
   useEffect(() => {
     if (!isLoading) {
@@ -116,6 +108,10 @@ function App() {
 
   const handleInitialize = useCallback(async () => {
     try {
+      // Initialize AudioContext on user gesture to prevent blocking
+      const TTSService = (await import('./services/TTSService')).default;
+      TTSService.getAudioContext();
+      
       const success = await startSpeech();
       if (success) {
         setAlert({ message: 'Neural Link Established', isVisible: true });
@@ -130,8 +126,7 @@ function App() {
   const handleStop = useCallback(() => {
     stopSpeech();
     setTranscript('');
-    setShowTerminal(false);
-  }, [stopSpeech, setShowTerminal]);
+  }, [stopSpeech]);
 
   const handleSave = useCallback(() => {
     localStorage.setItem('blobSettings', JSON.stringify(blobSettings));
@@ -167,6 +162,9 @@ function App() {
 
   const handleMouseUp = useCallback(() => setIsDragging(false), []);
 
+  // Determine if terminal should show
+  const showTerminal = isThinking || streamingText || aiResponse || conversationHistory.length > 0;
+
   return (
     <>
       {isLoading && <SplashScreen onComplete={handleSplashComplete} />}
@@ -184,7 +182,8 @@ function App() {
           showHero={showHero} 
           isListening={isListening} 
           onInitialize={handleInitialize} 
-          onStop={handleStop} 
+          onStop={handleStop}
+          onClearHistory={clearHistory}
         />
 
         <Hero showHero={showHero} />
@@ -205,24 +204,36 @@ function App() {
           />
         </div>
 
-        {!showHero && <VoiceControl transcript={transcript} isSupported={isSpeechSupported} />}
+        {!showHero && (
+          <VoiceControl 
+            transcript={transcript} 
+            isSupported={isSpeechSupported}
+            isListening={isListening}
+            pipelineState={pipelineState}
+          />
+        )}
         
         <SystemStatus 
           isListening={isListening}
-          isProcessing={isProcessing}
+          isThinking={isThinking}
+          isSpeaking={isSpeaking}
           isSupported={isSpeechSupported}
           permissionGranted={permissionGranted}
           showHero={showHero}
+          isBackendConnected={isBackendConnected}
+          pipelineState={pipelineState}
         />
         
         <BrainTerminal 
+          streamingText={streamingText}
           aiResponse={aiResponse} 
           isThinking={isThinking} 
-          translationData={translationData} 
-          isVisible={showTerminal} 
+          conversationHistory={conversationHistory}
+          isVisible={showTerminal && !showHero}
+          pipelineState={pipelineState}
         />
 
-        <PuterStatus isProcessing={isProcessing} />
+        <PuterStatus isProcessing={isThinking || isSpeaking} />
 
         <SystemAlert 
           message={alert.message} 

@@ -339,6 +339,26 @@
     transform: translateY(-2px);
 }
 
+.btn-test {
+    padding: 0.75rem;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.btn-test:hover {
+    background: rgba(56, 189, 248, 0.25);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(56, 189, 248, 0.3);
+}
+
 /* Nexus Info Panel */
 .nexus-info {
     position: absolute;

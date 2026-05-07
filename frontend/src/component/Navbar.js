@@ -82,6 +82,10 @@ function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
 
               <div className="settings-actions">
                 <button className="btn-save" onClick={() => { onSave(); handleCloseMenu(); }}>SAVE CHANGES</button>
+                <button className="btn-test" onClick={() => { 
+                  const TTSService = require('../services/TTSService').default;
+                  TTSService.speak("Testing system voice. Can you hear me, sir?");
+                }}>TEST_VOICE</button>
                 <button className="btn-reset" onClick={onReset}>RESET</button>
               </div>
             </div>

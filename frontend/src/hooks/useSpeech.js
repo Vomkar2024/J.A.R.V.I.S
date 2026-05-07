@@ -2,22 +2,26 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * useSpeech Hook
- * Encapsulates Speech Recognition, Audio Analysis, and Microphone permissions.
+ * Handles microphone access, real-time speech recognition, and volume analysis.
+ * No longer sends audio blobs — uses browser SpeechRecognition for instant transcription,
+ * then sends final text via the brain's WebSocket.
  */
-export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
+export const useSpeech = (onTranscriptChange, onFinalTranscript) => {
   // --- Audio State ---
   const [isListening, setIsListening] = useState(false);
-  const [volume, setVolume] = useState(0);                   // Real-time voice intensity
-  const [isSupported, setIsSupported] = useState(true);       // Browser compatibility flag
+  const [volume, setVolume] = useState(0);
+  const [isSupported, setIsSupported] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
   
   const recognitionRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const isListeningRef = useRef(false);
+  const silenceTimerRef = useRef(null);
+  const accumulatedTextRef = useRef('');
+  const lastResultIndexRef = useRef(0);
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -31,7 +35,7 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
         result.onchange = () => {
           setPermissionGranted(result.state === 'granted');
         };
-      });
+      }).catch(() => {});
     }
   }, []);
 
@@ -45,11 +49,48 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
       recognition.lang = 'en-US';
 
       recognition.onresult = (event) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          currentTranscript += event.results[i][0].transcript;
+        let finalText = '';
+        let interimText = '';
+        
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalText += result[0].transcript;
+          } else {
+            interimText += result[0].transcript;
+          }
         }
-        onTranscriptChange(currentTranscript);
+
+        // Show real-time interim results
+        const currentText = finalText + interimText;
+        onTranscriptChange(currentText);
+
+        // Reset silence timer on every result
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+        }
+
+        // If we have final text, wait for silence then send
+        if (finalText.trim().length > 2) {
+          accumulatedTextRef.current = finalText.trim();
+          
+          // Start silence detection — send after 1.5s of silence
+          silenceTimerRef.current = setTimeout(() => {
+            if (accumulatedTextRef.current && onFinalTranscript) {
+              onFinalTranscript(accumulatedTextRef.current);
+              accumulatedTextRef.current = '';
+              onTranscriptChange('');
+              lastResultIndexRef.current = 0;
+              
+              // Restart recognition to clear the results buffer
+              if (isListeningRef.current && recognitionRef.current) {
+                try {
+                  recognitionRef.current.stop();
+                } catch (e) { /* will restart via onend */ }
+              }
+            }
+          }, 1500);
+        }
       };
 
       recognition.onend = () => {
@@ -59,19 +100,25 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
             recognitionRef.current.start(); 
           } catch (e) {
             // Ignore error if already started
-            if (e.error !== 'no-speech') console.error('Recognition restart failed:', e);
           }
         }
       };
+
+      recognition.onerror = (event) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          console.error('Recognition error:', event.error);
+        }
+      };
+
       recognitionRef.current = recognition;
     } else {
       setIsSupported(false);
     }
-  }, [onTranscriptChange]);
+  }, [onTranscriptChange, onFinalTranscript]);
 
   /**
    * startSpeech
-   * Initializes the microphone, audio analyzer, and media recorder.
+   * Initializes the microphone and audio analyzer for volume visualization.
    * Also starts the speech recognition engine.
    */
   const startSpeech = useCallback(async () => {
@@ -80,27 +127,12 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
       setPermissionGranted(true);
       streamRef.current = stream;
       
-      // Audio Analysis setup
+      // Audio Analysis setup for blob visualization
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioContextRef.current.createMediaStreamSource(stream);
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
-
-      // Recorder setup
-      const recorder = new MediaRecorder(stream);
-      const chunks = [];
-      
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-      recorder.onstop = () => {
-        if (chunks.length > 0 && onAudioBlobReady) {
-          const audioBlob = new Blob(chunks, { type: 'audio/wav' });
-          onAudioBlobReady(audioBlob);
-        }
-      };
-      
-      recorder.start(5000); // 5s chunks
-      mediaRecorderRef.current = recorder;
 
       // Volume tracking
       const bufferLength = analyserRef.current.frequencyBinCount;
@@ -121,6 +153,9 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
 
       updateVolume();
       setIsListening(true);
+      isListeningRef.current = true;
+      accumulatedTextRef.current = '';
+      
       if (recognitionRef.current) {
         try { recognitionRef.current.start(); } catch (e) { /* ignore */ }
       }
@@ -132,27 +167,25 @@ export const useSpeech = (onTranscriptChange, onAudioBlobReady) => {
       setPermissionGranted(false);
       return false;
     }
-  }, [onAudioBlobReady]);
+  }, []);
 
   /**
    * stopSpeech
-   * Gracefully shuts down all audio resources including:
-   * - Speech Recognition
-   * - Media Recorder
-   * - Media Stream Tracks (Microphone)
-   * - Audio Context & Animation Frames
+   * Gracefully shuts down all audio resources.
    */
   const stopSpeech = useCallback(() => {
     isListeningRef.current = false;
     setIsListening(false);
     setVolume(0);
+    accumulatedTextRef.current = '';
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
 
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
-    }
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch (e) { /* ignore */ }
     }
 
     if (streamRef.current) {
