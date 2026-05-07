@@ -39,12 +39,6 @@ const BrainTerminal = ({ aiResponse, isThinking, translationData, isVisible }) =
     <div className="brain-terminal">
       <div className="terminal-header">
         <div className="header-top">
-          <span className="terminal-id">LOG_ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</span>
-          <div className="terminal-actions">
-            <span className="action-btn">_</span>
-            <span className="action-btn">□</span>
-            <span className="action-btn">×</span>
-          </div>
         </div>
         <div className="header-bottom">
           <div className={`status-indicator ${isThinking ? 'thinking' : 'active'}`}>
@@ -93,7 +87,6 @@ const BrainTerminal = ({ aiResponse, isThinking, translationData, isVisible }) =
       <div className="terminal-footer">
         <div className="matrix-bg"></div>
         <span className="footer-stat">LATENCY: 42ms</span>
-        <span className="footer-stat">TOKENS: {Math.floor(Math.random() * 500) + 100}/MIN</span>
       </div>
     </div>
   );

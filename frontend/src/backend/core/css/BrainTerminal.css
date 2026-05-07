@@ -1,6 +1,6 @@
 .brain-terminal {
     position: fixed;
-    right: 2rem;
+    left: 2rem;
     top: 50%;
     transform: translateY(-50%);
     width: 360px;
@@ -20,7 +20,7 @@
 }
 
 @keyframes terminalSlide {
-    from { transform: translateY(-50%) translateX(100%); opacity: 0; }
+    from { transform: translateY(-50%) translateX(-100%); opacity: 0; }
     to { transform: translateY(-50%) translateX(0); opacity: 1; }
 }
 

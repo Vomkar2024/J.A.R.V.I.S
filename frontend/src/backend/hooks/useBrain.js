@@ -13,6 +13,35 @@ export const useBrain = (lastProcessedTextRef) => {
   const [isThinking, setIsThinking] = useState(false);        // UI flag for LLM processing
   const [isProcessing, setIsProcessing] = useState(false);    // UI flag for Audio/STT processing
   const [showTerminal, setShowTerminal] = useState(false);    // Controls terminal visibility
+  
+  // Custom Hinglish-to-English mapper for JARVIS precision
+  const hinglishMap = {
+    'recognise kar raha hai': 'Recognising it',
+    'recognise kar raha hoon': 'Recognising it',
+    'recognize kar raha hai': 'Recognising it',
+    'recognize kar raha hoon': 'Recognising it',
+    'kaise ho': 'How are you',
+    'kya ho raha hai': 'What is happening',
+    'theek hai': 'Alright',
+    'shukriya': 'Thank you'
+  };
+
+  /**
+   * preprocessHinglish
+   * Normalizes Hinglish text and checks against the custom map.
+   */
+  const preprocessHinglish = (text) => {
+    if (!text) return text;
+    const normalized = text.toLowerCase().trim().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "");
+    
+    // Check for direct matches or patterns
+    for (const [key, value] of Object.entries(hinglishMap)) {
+      if (normalized.includes(key)) {
+        return value;
+      }
+    }
+    return text;
+  };
 
   /**
    * handleBrainInteraction
@@ -98,26 +127,31 @@ export const useBrain = (lastProcessedTextRef) => {
         return;
       }
 
-      // Fallback for text translation (Google Translate)
-      const GOOGLE_TRANSLATE_API = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=';
-      const url = `${GOOGLE_TRANSLATE_API}${encodeURIComponent(text)}`;
-      const resp = await fetch(url);
+      // High-Accuracy LLM Translation
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
       
-      if (!resp.ok) return;
+      if (!response.ok) return;
       
-      const data = await resp.json();
+      const data = await response.json();
+      let translated = data.translation;
       
-      if (data && data[0]) {
-        const translated = data[0].map(item => item[0]).join('');
-        const detectedLang = data[2];
-        if (detectedLang && detectedLang !== 'en') {
-          setTranslationData({
-            originalText: text,
-            translatedText: translated,
-            detectedLang: detectedLang.toUpperCase()
-          });
-          setShowTerminal(true);
+      if (translated) {
+        // Apply custom Hinglish mapping as a final polish
+        const mappedTranslation = preprocessHinglish(text);
+        if (mappedTranslation !== text) {
+          translated = mappedTranslation;
         }
+
+        setTranslationData({
+          originalText: text,
+          translatedText: translated,
+          detectedLang: "NEURAL_LINK"
+        });
+        setShowTerminal(true);
       }
     } catch (error) {
       console.error('Neural glitch:', error);

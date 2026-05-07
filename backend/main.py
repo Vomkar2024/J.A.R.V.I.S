@@ -43,6 +43,15 @@ async def ask_llm(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/translate")
+async def translate_text(request: ChatRequest):
+    """Translates text using Groq LLM (High Accuracy)."""
+    try:
+        translation = await processor.translate_text(request.text)
+        return {"translation": translation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/tts")
 async def text_to_speech(request: ChatRequest):
     """Converts text to speech using Edge TTS."""

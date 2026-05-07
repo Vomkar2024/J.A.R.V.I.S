@@ -33,11 +33,10 @@ class JarvisProcessor:
                 await f.write(audio_content)
             
             with open(temp_path, "rb") as file:
-                transcription = self.client.audio.transcriptions.create(
+                transcription = self.client.audio.translations.create(
                     file=(temp_filename, file.read()),
                     model="whisper-large-v3",
-                    response_format="text",
-                    language="en"
+                    response_format="text"
                 )
             return transcription
         except Exception as e:
@@ -64,6 +63,29 @@ class JarvisProcessor:
         except Exception as e:
             print(f"LLM Error: {e}")
             return "I'm sorry, sir. I'm having trouble accessing my neural network at the moment."
+
+    async def translate_text(self, text: str) -> str:
+        """High-accuracy translation specifically tuned for Hinglish/Hindi to English."""
+        try:
+            prompt = (
+                "You are a master translator. Translate the following Hinglish or Hindi text into clear, "
+                "natural English. Only return the translation, no explanations or quotes. "
+                f"Text: {text}"
+            )
+            completion = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant", # Using a faster model for real-time translation
+                messages=[
+                    {"role": "system", "content": "You are a professional translator. Output only the translated text."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=512,
+                stream=False
+            )
+            return completion.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Translation Error: {e}")
+            return text
 
     async def text_to_speech(self, text: str) -> str:
         """Converts text to audio using Edge TTS (Microsoft Ryan Neural)."""

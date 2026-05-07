@@ -4,8 +4,8 @@
   "description": "Root package to manage J.A.R.V.I.S project",
   "scripts": {
     "sync-env": "powershell -Command \"cp .env frontend/.env; cp .env backend/.env\"",
-    "start": "npm run sync-env && npm start --prefix frontend",
-    "dev": "npm run sync-env && npm start --prefix frontend",
+    "start": "npm run sync-env && set NODE_OPTIONS=--no-deprecation && npm start --prefix frontend",
+    "dev": "npm run sync-env && set NODE_OPTIONS=--no-deprecation && npm start --prefix frontend",
     "backend": "npm run sync-env && cd backend && python main.py",
     "build": "npm run sync-env && npm run build --prefix frontend",
     "test": "npm test --prefix frontend"
