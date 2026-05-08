@@ -60,7 +60,7 @@ const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permis
 
           <div className={`status-item ${isBackendConnected ? 'online' : 'error'}`}>
             <span className="item-label">WS_LINK</span>
-            <span className="item-value">{isBackendConnected ? 'ESTABLISHED' : 'LINK_LOST'}</span>
+            <span className="item-value">{isBackendConnected ? 'STABLE' : 'LINK_LOST'}</span>
           </div>
         </div>
       </div>

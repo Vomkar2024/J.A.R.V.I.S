@@ -120,13 +120,16 @@ async def websocket_endpoint(ws: WebSocket):
 # REST Endpoints — Fallback / Direct API Access
 # ============================================================
 @app.post("/stt")
-async def speech_to_text(file: UploadFile = File(...)):
-    """Transcribes audio using Groq Whisper."""
+async def speech_to_text(file: UploadFile = File(...), mode: str = "cloud"):
+    """Transcribes audio using Groq Whisper (cloud) or Vosk (local)."""
     try:
         content = await file.read()
-        ext = file.filename.split(".")[-1]
-        text = await processor.speech_to_text(content, ext)
-        return {"text": text}
+        if mode == "local":
+            text = await processor.speech_to_text_local(content)
+        else:
+            ext = file.filename.split(".")[-1]
+            text = await processor.speech_to_text(content, ext)
+        return {"text": text, "mode": mode}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,4 +1,6 @@
 {
     "python.terminal.useEnvFile": true,
-    "python.terminal.activateEnvironment": true
+    "python.terminal.activateEnvironment": true,
+    "python.useEnvironmentsExtension": false,
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv_stable/Scripts/python.exe"
 }

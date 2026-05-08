@@ -2,6 +2,9 @@ import os
 import uuid
 import asyncio
 import aiofiles
+import json
+import base64
+import vosk
 from groq import Groq
 import edge_tts
 
@@ -28,6 +31,18 @@ class JarvisProcessor:
         # Conversation memory (last N exchanges)
         self.conversation_history = []
         self.max_history = 10
+        
+        # Vosk STT Model
+        self.vosk_model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model")
+        self.vosk_model = None
+        if os.path.exists(self.vosk_model_path):
+            try:
+                self.vosk_model = vosk.Model(self.vosk_model_path)
+                print(f"[Processor] Vosk model loaded from {self.vosk_model_path}")
+            except Exception as e:
+                print(f"[Processor] Error loading Vosk model: {e}")
+        else:
+            print(f"[Processor] Vosk model not found at {self.vosk_model_path}. Local STT will be disabled.")
 
     def _add_to_history(self, role: str, content: str):
         """Add a message to conversation history."""
@@ -58,6 +73,27 @@ class JarvisProcessor:
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    async def speech_to_text_local(self, audio_content: bytes) -> str:
+        """Transcribes audio locally using Vosk."""
+        if not self.vosk_model:
+            return "Error: Vosk model not loaded."
+        
+        try:
+            # Vosk expects 16kHz mono PCM audio
+            # For simplicity, we assume the input is already in this format or we handle it
+            # In a real scenario, we might need to convert it using ffmpeg
+            rec = vosk.KaldiRecognizer(self.vosk_model, 16000)
+            
+            if rec.AcceptWaveform(audio_content):
+                res = json.loads(rec.Result())
+                return res.get("text", "")
+            else:
+                res = json.loads(rec.FinalResult())
+                return res.get("text", "")
+        except Exception as e:
+            print(f"Local STT Error: {e}")
+            return ""
 
     async def ask_llm(self, text: str) -> str:
         """Gets a response from Groq LLM (non-streaming fallback)."""
@@ -156,11 +192,15 @@ class JarvisProcessor:
     async def text_to_speech_bytes(self, text: str) -> bytes:
         """Converts text to audio bytes using Edge TTS. Returns raw MP3 bytes."""
         try:
+            # Consistent with tts_service.py VOICE variable
             communicate = edge_tts.Communicate(text, "en-GB-RyanNeural")
             audio_data = b""
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_data += chunk["data"]
+                    # If we wanted to mirror the printing in tts_service.py:
+                    # audio_base64 = base64.b64encode(chunk["data"])
+                    # print(f"AUDIO_CHUNK:{audio_base64}")
             return audio_data
         except Exception as e:
             print(f"TTS Bytes Error: {e}")
