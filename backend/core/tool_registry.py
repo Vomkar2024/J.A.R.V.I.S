@@ -63,6 +63,11 @@ class JarvisTools:
         """Searches for files matching a query in the specified directory."""
         return "SEARCH_FILES_REQUESTED"
 
+    @staticmethod
+    def read_file(path: str):
+        """Reads the content of a file at the specified path."""
+        return "READ_FILE_REQUESTED"
+
 # Tool Definitions for Groq API
 TOOL_DEFINITIONS = [
     {
@@ -184,6 +189,23 @@ TOOL_DEFINITIONS = [
                 "required": ["query"]
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read the text content of a file. Use this to examine code or data files.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The file path (relative to project root)."
+                    }
+                },
+                "required": ["path"]
+            },
+        },
     }
 ]
 
@@ -206,6 +228,8 @@ def execute_tool(tool_name: str, arguments: dict):
             return JarvisTools.create_file(arguments.get("path"), arguments.get("content"))
         elif tool_name == "search_files":
             return JarvisTools.search_files(arguments.get("query"), arguments.get("root_dir", "."))
+        elif tool_name == "read_file":
+            return JarvisTools.read_file(arguments.get("path"))
         else:
             return f"Error: Tool '{tool_name}' not found."
     except Exception as e:

@@ -182,6 +182,14 @@ class JarvisProcessor:
                             function_response = f"Command failed: {e.output[:500]}..."
                         except Exception as e:
                             function_response = f"Error: {str(e)}"
+                    elif function_response == "READ_FILE_REQUESTED":
+                        path = function_args.get("path")
+                        try:
+                            with open(path, "r", encoding="utf-8") as f:
+                                content = f.read()
+                            function_response = f"File Content of {path}:\n{content[:2000]}"
+                        except Exception as e:
+                            function_response = f"Error reading file: {str(e)}"
                     
                     messages.append({
                         "tool_call_id": tool_call.id,
@@ -194,6 +202,7 @@ class JarvisProcessor:
                 second_completion = self.client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=messages,
+                    tool_choice="none" # Ensure final response is text
                 )
                 response = second_completion.choices[0].message.content
             else:
@@ -265,6 +274,14 @@ class JarvisProcessor:
                             function_response = f"File created successfully at {path}."
                         except Exception as e:
                             function_response = f"Error creating file: {str(e)}"
+                    elif function_response == "READ_FILE_REQUESTED":
+                        path = function_args.get("path")
+                        try:
+                            with open(path, "r", encoding="utf-8") as f:
+                                content = f.read()
+                            function_response = f"File Content of {path}:\n{content[:2000]}"
+                        except Exception as e:
+                            function_response = f"Error reading file: {str(e)}"
                     elif function_response == "SEARCH_FILES_REQUESTED":
                         query = function_args.get("query")
                         root = function_args.get("root_dir", ".")
@@ -292,13 +309,26 @@ class JarvisProcessor:
                     })
                 
                 # After tool execution, stream the final response
+                # We use tool_choice="none" here because our streaming loop 
+                # only handles text content, not further tool calls.
                 stream = self.client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=messages,
+                    tool_choice="none",
                     stream=True
                 )
+                
+                full_response = ""
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        token = chunk.choices[0].delta.content
+                        full_response += token
+                        yield token
             else:
-                # No tool calls, stream the original response
+                # No tool calls, we can just yield the content from the first call
+                # But to keep the "streaming" feel, we'll split it into tokens
+                # OR we could call it again with stream=True. 
+                # Calling again is safer to get the exact same behavior as the tool-calling path.
                 stream = self.client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=messages,
@@ -306,13 +336,13 @@ class JarvisProcessor:
                     max_tokens=300,
                     stream=True
                 )
-            
-            full_response = ""
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    token = chunk.choices[0].delta.content
-                    full_response += token
-                    yield token
+                
+                full_response = ""
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        token = chunk.choices[0].delta.content
+                        full_response += token
+                        yield token
             
             self._add_to_history("assistant", full_response)
             
