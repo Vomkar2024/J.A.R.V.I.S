@@ -14,11 +14,13 @@ class JarvisMemory:
         self.db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory_db")
         os.makedirs(self.db_path, exist_ok=True)
         
-        # Initialize Chroma Client
-        self.client = chromadb.PersistentClient(path=self.db_path)
+        # Initialize Chroma Client with telemetry disabled to suppress warnings
+        self.client = chromadb.PersistentClient(
+            path=self.db_path,
+            settings=chromadb.Settings(anonymized_telemetry=False)
+        )
         
         # Using default embedding function
-        # Note: In a production environment, you might want to use a specific model
         self.collection = self.client.get_or_create_collection(
             name="jarvis_conversations",
             metadata={"description": "Long-term memory for J.A.R.V.I.S conversations"}

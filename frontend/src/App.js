@@ -48,6 +48,7 @@ function App() {
   const [showHero, setShowHero] = useState(true);
   const [transcript, setTranscript] = useState('');
   const [alert, setAlert] = useState({ message: '', isVisible: false });
+  const [hudForceExpand, setHudForceExpand] = useState(false);
 
   // --- Brain Hook (WebSocket) ---
   const {
@@ -120,13 +121,22 @@ function App() {
       const success = await startSpeech();
       if (success) {
         setAlert({ message: ALERTS.LINK_ESTABLISHED, isVisible: true });
+        
+        // CINEMATIC SEQUENCE: Expand HUD and trigger greeting
+        setHudForceExpand(true);
+        
+        setTimeout(() => {
+          sendMessage("Hello Jarvis. Run system greeting.");
+          // Retract HUD after a few seconds of being fully initialized
+          setTimeout(() => setHudForceExpand(false), 5000);
+        }, 1000);
       } else {
         setAlert({ message: ALERTS.LINK_FAILED, isVisible: true });
       }
     } catch (error) {
       console.error('System Crash during initialization:', error);
     }
-  }, [startSpeech]);
+  }, [startSpeech, sendMessage]);
 
   const handleStop = useCallback(() => {
     stopSpeech();
@@ -230,6 +240,7 @@ function App() {
           pipelineState={pipelineState}
           activeTool={activeTool}
           telemetry={telemetry}
+          forceExpand={hudForceExpand}
         />
         
         <BrainTerminal 

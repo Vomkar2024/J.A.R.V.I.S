@@ -16,14 +16,20 @@ class JarvisVision:
         self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
     def capture_screen(self):
-        """Captures the primary monitor and returns a base64 encoded string."""
+        """Captures the primary monitor and returns a base64 encoded string with token optimization."""
         try:
             screenshot = pyautogui.screenshot()
+            
+            # PROACTIVE REPAIR: Token Saver — Resize image for Vision model efficiency
+            # Llama 3.2 Vision uses tiles; smaller images = fewer tiles = fewer tokens
+            max_size = (1280, 720)
+            screenshot.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
             buffered = BytesIO()
             # Compress to save bandwidth/tokens
-            screenshot.save(buffered, format="JPEG", quality=70)
+            screenshot.save(buffered, format="JPEG", quality=65)
             img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-            print(f"[Vision] Screen captured into memory buffer.")
+            print(f"[Vision] Optimized screen captured ({screenshot.width}x{screenshot.height}).")
             return img_str
         except Exception as e:
             print(f"[Vision] Capture Error: {e}")

@@ -6,7 +6,7 @@ import './css/SystemStatus.css';
  * A futuristic, HUD-style status bar that displays the real-time state 
  * of the J.A.R.V.I.S subsystems. Uses WebSocket connection status.
  */
-const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permissionGranted, showHero, isBackendConnected, pipelineState, activeTool, telemetry }) => {
+const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permissionGranted, showHero, isBackendConnected, pipelineState, activeTool, telemetry, forceExpand }) => {
   const [isRetracted, setIsRetracted] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   
@@ -17,14 +17,14 @@ const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permis
       // Delay expansion slightly for a smooth transition after hero fades
       const timer = setTimeout(() => {
         setIsVisible(true);
-        // Removed auto-expansion to keep HUD retracted by default
+        if (forceExpand) setIsRetracted(false);
       }, 500);
       return () => clearTimeout(timer);
     } else {
       setIsVisible(false);
       setIsRetracted(true);
     }
-  }, [showHero]);
+  }, [showHero, forceExpand]);
 
   const toggleHUD = useCallback(() => setIsRetracted(prev => !prev), []);
 

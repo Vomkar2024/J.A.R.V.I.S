@@ -80,6 +80,11 @@ class JarvisTools:
         # This will be handled by the processor using web search or a mock
         return "WEATHER_REQUESTED"
 
+    @staticmethod
+    def export_conversation(format: str = "pdf"):
+        """Exports the full raw conversation history to a professional document (PDF or Word)."""
+        return "EXPORT_CONVERSATION_REQUESTED"
+
 # Tool Definitions for Groq API
 TOOL_DEFINITIONS = [
     {
@@ -280,6 +285,8 @@ def execute_tool(tool_name: str, arguments: dict):
             return JarvisTools.web_search(arguments.get("query"))
         elif tool_name == "get_weather":
             return JarvisTools.get_weather(arguments.get("location"))
+        elif tool_name == "export_conversation":
+            return JarvisTools.export_conversation(arguments.get("format", "pdf"))
         else:
             return f"Error: Tool '{tool_name}' not found."
     except Exception as e:

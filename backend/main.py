@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -17,6 +17,11 @@ except ImportError:
     HAS_PSUTIL = False
 
 load_dotenv(find_dotenv())
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+if not GROQ_API_KEY or GROQ_API_KEY.startswith("gsk_your_key"):
+    print("\n[CRITICAL ERROR] GROQ_API_KEY is missing or invalid in .env file.")
+    print("Please set your key to enable J.A.R.V.I.S Intelligence.\n")
 
 app = FastAPI()
 processor = JarvisProcessor()
@@ -43,7 +48,7 @@ async def websocket_endpoint(ws: WebSocket):
     
     Protocol:
     Client -> Server (JSON):
-        {"type": "chat", "text": "Hello Jarvis"}
+        {"type": "chat", "text": "Hello J.A.R.V.I.S."}
         {"type": "clear_history"}
     
     Server -> Client (JSON):
@@ -257,16 +262,19 @@ async def translate_text(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tts")
-async def text_to_speech(request: ChatRequest):
+async def text_to_speech(request: ChatRequest, background_tasks: BackgroundTasks):
     """Converts text to speech using Edge TTS."""
     try:
         audio_path = await processor.text_to_speech(request.text)
+        # PROACTIVE REPAIR: Cleanup temp file after response
+        if audio_path and os.path.exists(audio_path):
+            background_tasks.add_task(os.remove, audio_path)
         return FileResponse(audio_path, media_type="audio/mpeg", filename="response.mp3")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/process-audio")
-async def process_audio(file: UploadFile = File(...)):
+async def process_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """Full cycle: Audio -> Text -> LLM -> Audio."""
     try:
         content = await file.read()
@@ -275,6 +283,10 @@ async def process_audio(file: UploadFile = File(...)):
         if not user_text:
             return {"error": "No speech detected"}
         
+        # PROACTIVE REPAIR: Cleanup temp file after response
+        if audio_path and os.path.exists(audio_path):
+            background_tasks.add_task(os.remove, audio_path)
+            
         return FileResponse(
             audio_path, 
             media_type="audio/mpeg", 

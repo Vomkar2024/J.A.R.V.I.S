@@ -1,4 +1,5 @@
 import os
+import datetime
 import uuid
 import asyncio
 import aiofiles
@@ -13,6 +14,8 @@ from core.memory import JarvisMemory
 from core.vision import JarvisVision
 import subprocess
 import glob
+from docx import Document
+from fpdf import FPDF
 
 class JarvisProcessor:
     """
@@ -26,13 +29,23 @@ class JarvisProcessor:
         self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp")
         os.makedirs(self.temp_dir, exist_ok=True)
         
-        # J.A.R.V.I.S Settings
+        # Clean temp directory on startup
+        try:
+            files = glob.glob(os.path.join(self.temp_dir, "*"))
+            for f in files:
+                if os.path.isfile(f):
+                    os.remove(f)
+            print(f"[Processor] Temporary directory purged: {len(files)} files removed.")
+        except Exception as e:
+            print(f"[Processor] Startup cleanup failed: {e}")
+        
+        # J.A.R.V.I.S. Core Configuration
         self.voice = "en-GB-RyanNeural"
         self.system_prompt = (
             "You are J.A.R.V.I.S., the sophisticated AI from the Marvel movies. "
             "You are currently using the movie-accurate voice profile from the integrated "
             "Voice Pack. Your tone is dry, British, witty, and extremely loyal. "
-            "Respond as if you are actually JARVIS assisting YOU (the user), your creator. "
+            "Respond as if you are actually J.A.R.V.I.S. assisting YOU (the user), your creator. "
             "Keep responses concise and elegant."
         )
         
@@ -44,7 +57,9 @@ class JarvisProcessor:
         
         # Conversation memory (last N exchanges)
         self.conversation_history = []
+        self.full_history_archive = [] # Raw logs for document export
         self.max_history = 10
+        self.condensed_summary = "" # Holds the summary of older interactions
         
         # Vosk STT Model
         self.vosk_model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "model")
@@ -59,11 +74,32 @@ class JarvisProcessor:
             print(f"[Processor] Vosk model not found at {self.vosk_model_path}. Local STT will be disabled.")
 
     def _add_to_history(self, role: str, content: str):
-        """Add a message to conversation history."""
+        """Add a message to conversation history with recursive summarization to save tokens."""
         self.conversation_history.append({"role": role, "content": content})
-        # Trim to max history
-        if len(self.conversation_history) > self.max_history * 2:
-            self.conversation_history = self.conversation_history[-(self.max_history * 2):]
+        self.full_history_archive.append({"role": role, "content": content, "timestamp": datetime.datetime.now().isoformat()})
+        
+        # Automatic context condensing
+        # If history exceeds 12 messages, condense the first 6 into a summary
+        if len(self.conversation_history) > 12:
+            print("[Processor] 🧠 Condensing neural history to save tokens...")
+            to_condense = self.conversation_history[:6]
+            self.conversation_history = self.conversation_history[6:]
+            
+            # Use LLM to summarize the condensed part
+            try:
+                summary_prompt = "Summarize the following conversation snippet into one concise sentence to preserve context for future interactions:\n\n"
+                for msg in to_condense:
+                    summary_prompt += f"{msg['role']}: {msg['content']}\n"
+                
+                completion = self.client.chat.completions.create(
+                    model="llama-3-8b-8192", # Use small model for internal tasks
+                    messages=[{"role": "user", "content": summary_prompt}],
+                    max_tokens=100
+                )
+                new_summary = completion.choices[0].message.content.strip()
+                self.condensed_summary = f"{self.condensed_summary} {new_summary}".strip()
+            except Exception as e:
+                print(f"[Processor] Summarization failed: {e}")
 
     async def speech_to_text(self, audio_content: bytes, extension: str) -> str:
         """Transcribes audio using Groq Whisper-Large-V3-Turbo (faster)."""
@@ -111,13 +147,24 @@ class JarvisProcessor:
 
     async def ask_llm(self, text: str) -> str:
         """Gets a response from Groq LLM (non-streaming fallback, handles tools & memory)."""
+        # Startup Greeting Sequence
+        if "Run system greeting" in text:
+            return "Welcome back, sir. All systems are operational. Neural link is stable, and I am standing by for your instructions."
+
         try:
             self._add_to_history("user", text)
             
+            # Prepare messages with condensed summary
+            messages = [{"role": "system", "content": self.system_prompt}]
+            
+            if self.condensed_summary:
+                messages.append({"role": "system", "content": f"PREVIOUS CONTEXT SUMMARY: {self.condensed_summary}"})
+                
             # Retrieve relevant past memories (RAG)
             relevant_context = self.memory.query_memory(text)
+            if relevant_context:
+                messages.append({"role": "system", "content": f"RELEVANT MEMORIES: {relevant_context}"})
             
-            messages = [{"role": "system", "content": self.system_prompt + relevant_context}]
             messages.extend(self.conversation_history)
             
             # Initial LLM call with tools
@@ -153,6 +200,9 @@ class JarvisProcessor:
                         # We could emit a signal here if we had the websocket context, 
                         # but in non-streaming fallback we just process it.
                         function_response = self.vision.analyze_screen(query)
+                    elif function_response == "EXPORT_CONVERSATION_REQUESTED":
+                        fmt = function_args.get("format", "pdf")
+                        function_response = self._export_to_document(fmt)
                     elif function_response == "CREATE_FILE_REQUESTED":
                         path = function_args.get("path")
                         content = function_args.get("content")
@@ -177,7 +227,7 @@ class JarvisProcessor:
                         print(f"[Processor] Executing Terminal: {command}")
                         try:
                             # Running in a subprocess and capturing output
-                            # Note: In a real Jarvis, you'd want more safety/confirmation
+                            # Note: In a real J.A.R.V.I.S., you'd want more safety/confirmation
                             result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
                             function_response = f"Command Output: {result[:500]}..."
                         except subprocess.CalledProcessError as e:
@@ -246,9 +296,9 @@ class JarvisProcessor:
             # Chroma get() might not return in order, but for now we'll take the 5 most recent
             for i in range(len(docs)-1, -1, -1):
                 content = docs[i]
-                # Try to parse "User: ... \nJarvis: ..."
-                if "User:" in content and "Jarvis:" in content:
-                    parts = content.split("Jarvis:")
+                # Try to parse "User: ... \nJ.A.R.V.I.S.: ..."
+                if "User:" in content and "J.A.R.V.I.S.:" in content:
+                    parts = content.split("J.A.R.V.I.S.:")
                     user_text = parts[0].replace("User:", "").strip()
                     ai_text = parts[1].strip()
                     
@@ -262,9 +312,12 @@ class JarvisProcessor:
     def stream_llm(self, text: str):
         """
         Streams LLM response token by token (generator).
-        Note: Tool calling is handled synchronously before streaming the final response.
-        Memory retrieval (RAG) is performed before the first LLM call.
         """
+        # Startup Greeting Sequence
+        if "Run system greeting" in text:
+            yield "Welcome back, sir. All systems are operational. Neural link is stable, and I am standing by for your instructions."
+            return
+
         try:
             self._add_to_history("user", text)
             
@@ -358,6 +411,9 @@ class JarvisProcessor:
                                     function_response = json.dumps(results)
                             except Exception as e:
                                 function_response = f"Could not fetch weather: {str(e)}"
+                        elif function_response == "EXPORT_CONVERSATION_REQUESTED":
+                            fmt = function_args.get("format", "pdf")
+                            function_response = self._export_to_document(fmt)
                         elif function_response == "TERMINAL_EXECUTION_REQUESTED":
                             command = function_args.get("command")
                             print(f"[Processor] Executing Terminal: {command}")
@@ -497,3 +553,62 @@ class JarvisProcessor:
     def clear_history(self):
         """Clears conversation history."""
         self.conversation_history = []
+        self.full_history_archive = []
+        self.condensed_summary = ""
+
+    def _export_to_document(self, format: str = "pdf"):
+        """Generates a professional document from the full history archive."""
+        if not self.full_history_archive:
+            return "Error: No conversation history available to export."
+
+        filename = f"J.A.R.V.I.S._Log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        try:
+            if format.lower() == "docx":
+                path = os.path.join(self.temp_dir, f"{filename}.docx")
+                doc = Document()
+                doc.add_heading('J.A.R.V.I.S — Neural Link Conversation Log', 0)
+                
+                for msg in self.full_history_archive:
+                    p = doc.add_paragraph()
+                    role = "USER" if msg['role'] == 'user' else "J.A.R.V.I.S"
+                    p.add_run(f"[{msg.get('timestamp', 'N/A')}] ").bold = True
+                    p.add_run(f"{role}: ").bold = True
+                    p.add_run(msg['content'])
+                
+                doc.save(path)
+                return f"Success: Conversation exported to Word file at {path}. I have preserved every exchange for your records, sir."
+                
+            else: # PDF
+                path = os.path.join(self.temp_dir, f"{filename}.pdf")
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("helvetica", 'B', 16)
+                pdf.cell(0, 10, "J.A.R.V.I.S — Conversation Log", 0, 1, 'C')
+                pdf.ln(10)
+                
+                pdf.set_font("helvetica", size=10)
+                for msg in self.full_history_archive:
+                    role = "USER" if msg['role'] == 'user' else "J.A.R.V.I.S."
+                    ts = msg.get('timestamp', 'N/A')[:19].replace('T', ' ')
+                    
+                    pdf.set_text_color(100, 100, 100)
+                    pdf.write(5, f"[{ts}] ")
+                    
+                    if role == "USER":
+                        pdf.set_text_color(0, 0, 200) # Blue for user
+                    else:
+                        pdf.set_text_color(200, 0, 0) # Red for Jarvis
+                        
+                    pdf.set_font("helvetica", 'B', 10)
+                    pdf.write(5, f"{role}: ")
+                    
+                    pdf.set_font("helvetica", size=10)
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.write(5, f"{msg['content']}\n\n")
+                
+                pdf.output(path)
+                return f"Success: Conversation exported to PDF at {path}. The session logs are now secured in a portable format, sir."
+                
+        except Exception as e:
+            return f"Error during export: {str(e)}"

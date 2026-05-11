@@ -192,7 +192,7 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
         console.error('[Neural] 💥 Even fresh instance failed:', e);
       }
     }
-  }, []); // attachRecognitionHandlers defined below, linked via ref pattern
+  }, [attachRecognitionHandlers]); // attachRecognitionHandlers defined below, linked via ref pattern
 
   // ============================================================
   // Watchdog Timer — Detect Silently-Dead Recognition
