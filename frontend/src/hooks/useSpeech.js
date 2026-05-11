@@ -34,7 +34,7 @@ const NEURAL_CONFIG = {
  * - Graceful degradation with user feedback
  * - Uses browser SpeechRecognition for instant transcription
  */
-export const useSpeech = (onTranscriptChange, onFinalTranscript) => {
+export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = false) => {
   // --- Audio State ---
   const [isListening, setIsListening] = useState(false);
   const [volume, setVolume] = useState(0);
@@ -60,6 +60,11 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript) => {
   const lastActivityRef = useRef(Date.now());
   const isRestartingRef = useRef(false);
   const mountedRef = useRef(true);
+  const isSpeakingRef = useRef(isSpeaking);
+
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -222,6 +227,7 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript) => {
 
   const attachRecognitionHandlers = useCallback((recognition) => {
     recognition.onresult = (event) => {
+      if (isSpeakingRef.current) return; // Guard: Ignore speech while JARVIS is speaking
       lastActivityRef.current = Date.now();
       
       let finalText = '';

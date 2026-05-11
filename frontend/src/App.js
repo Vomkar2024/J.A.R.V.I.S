@@ -74,7 +74,7 @@ function App() {
     permissionGranted,
     startSpeech,
     stopSpeech
-  } = useSpeech(setTranscript, onFinalTranscript);
+  } = useSpeech(setTranscript, onFinalTranscript, isSpeaking);
 
   // --- System Initialization ---
   
