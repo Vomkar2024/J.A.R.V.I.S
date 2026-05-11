@@ -119,8 +119,8 @@ class JarvisProcessor:
                 )
             return transcription
         except Exception as e:
-            print(f"STT Error: {e}")
-            return ""
+            print(f"[Processor] Cloud STT failed ({e}), falling back to local engine...")
+            return await self.speech_to_text_local(audio_content)
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -537,16 +537,31 @@ class JarvisProcessor:
 
     def _is_safe_command(self, command: str) -> bool:
         """
-        Safety check for terminal commands.
-        Prevents dangerous operations and restricts to a safe set of tools.
+        Hardened Neural Safety Protocol.
+        Blocks destructive, system-altering, and credential-leaking commands.
         """
-        # Block destructive commands
-        dangerous_keywords = ["rm -rf", "del /s", "format", "mkfs", "chmod -R 777", "> /dev/"]
-        for kw in dangerous_keywords:
-            if kw in command.lower():
+        blocked_keywords = [
+            # Destructive
+            "rm ", "del ", "format ", "mkfs", "shred", "wipe",
+            # System Altering
+            "chmod", "chown", "passwd", "useradd", "groupadd", "systemctl stop", 
+            # Data Leaking / Sensitive
+            "curl -X POST", "wget --post", "env", "printenv", "secrets", ".env",
+            # Shell Escapes
+            "powershell -e", "base64", "python -c", "perl -e", "bash -i"
+        ]
+        
+        cmd_lower = command.lower().strip()
+        for kw in blocked_keywords:
+            if kw in cmd_lower:
                 return False
         
-        # In a real J.A.R.V.I.S., we would have a more robust sandbox or whitelist
+        # Additional check: block attempts to write to sensitive system paths
+        forbidden_paths = ["C:\\Windows", "/etc/", "/var/lib/", "/usr/bin/"]
+        for path in forbidden_paths:
+            if path.lower() in cmd_lower:
+                return False
+
         return True
 
     def _export_to_document(self, format: str = "pdf"):

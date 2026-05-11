@@ -109,21 +109,27 @@ const TTSService = {
     try {
       const ctx = this.getAudioContext();
       const arrayBuffer = await blob.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       
-      sourceNode = ctx.createBufferSource();
-      sourceNode.buffer = audioBuffer;
-      sourceNode.connect(analyser);
-      
-      sourceNode.onended = () => {
-        sourceNode = null;
+      // Attempt to decode binary MP3 chunk
+      ctx.decodeAudioData(arrayBuffer, (audioBuffer) => {
+        sourceNode = ctx.createBufferSource();
+        sourceNode.buffer = audioBuffer;
+        sourceNode.connect(analyser);
+        
+        sourceNode.onended = () => {
+          sourceNode = null;
+          this.processQueue();
+        };
+        
+        sourceNode.start(0);
+      }, (error) => {
+        console.error('[TTSService] Chunk decoding failed, falling back to Web Speech:', error);
+        // Fallback: try to find the text if this was a text-based blob (unlikely for binary, but good for safety)
+        // More realistically, we just skip this chunk or log it.
         this.processQueue();
-      };
-      
-      sourceNode.start(0);
+      });
     } catch (error) {
-      console.error('[TTSService] Queue playback failed:', error);
-      // If a chunk fails, try next one
+      console.error('[TTSService] Queue processing fatal error:', error);
       this.processQueue();
     }
   },

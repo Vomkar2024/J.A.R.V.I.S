@@ -51,7 +51,7 @@ class JarvisMemory:
             print(f"[Memory] Error storing memory: {e}")
 
     def query_memory(self, query: str, n_results: int = 3):
-        """Retrieves semantically relevant past conversations."""
+        """Retrieves semantically relevant past conversations with enhanced formatting."""
         try:
             collection = self._get_collection()
             results = collection.query(
@@ -59,14 +59,21 @@ class JarvisMemory:
                 n_results=n_results
             )
             
-            memories = results.get("documents", [[]])[0]
-            if not memories:
+            docs = results.get("documents", [[]])[0]
+            metas = results.get("metadatas", [[]])[0]
+            
+            if not docs:
                 return ""
                 
-            context = "\n---\nRelevant Past Memories:\n" + "\n".join(memories)
+            context = "\n[NEURAL MEMORY RECALL INITIATED]\n"
+            for i in range(len(docs)):
+                ts = metas[i].get("timestamp", "Unknown Time")[:16].replace("T", " ")
+                context += f"--- Entry ({ts}) ---\n{docs[i]}\n"
+            
+            context += "[END MEMORY RECALL]\n"
             return context
         except Exception as e:
-            print(f"[Memory] Error querying memory: {e}")
+            print(f"[Memory] Recall Error: {e}")
             return ""
 
     def clear_all_memories(self):

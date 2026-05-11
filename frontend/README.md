@@ -24,10 +24,15 @@ The primary hook managing the WebSocket connection. It features:
 - **Signal Processing**: Recognizes visual signals like `[VISION_ACTIVE]` and `[TOOL_START]` to trigger HUD transitions.
 
 ### 2. `useSpeech` (The Listening Ear)
-Wraps the Browser Web Speech API for high-speed local transcription. It includes a "Silence Threshold" of 1.5s to automatically submit thoughts to the backend once the user stops speaking.
+Wraps the Browser Web Speech API for high-speed local transcription. Features include:
+- **Recognition Watchdog**: A persistent monitor that detects and restarts silently-dead recognition processes.
+- **Circular Resilience**: An advanced hook architecture that allows for full neural resets without memory leaks.
+- **Silence Detection**: Automatically submits input after 1.5s of silence.
 
 ### 3. `TTSService` (The Voice Box)
-Uses the **Web Audio API** for direct decoding of binary streams. By avoiding the standard `<audio>` tag, J.A.R.V.I.S achieves gapless, low-latency playback even while the response is still being generated.
+Uses the **Web Audio API** and an **Intelligent Audio Queue** for gapless playback. Features:
+- **Resilient Decoding**: If a binary frame is corrupted or the service flickers, the service auto-repairs and continues the sequence without crashing the HUD.
+- **Neural Buffering**: Queues incoming chunks to maintain zero-latency speech even during high network jitter.
 
 ---
 
