@@ -55,6 +55,7 @@ function App() {
     isBackendConnected,
     pipelineState,
     conversationHistory,
+    telemetry,
     sendMessage,
     clearHistory
   } = useBrain();
@@ -201,6 +202,7 @@ function App() {
             color={blobSettings.color} 
             sensitivity={blobSettings.sensitivity} 
             volume={volume} 
+            pipelineState={pipelineState}
           />
         </div>
 
@@ -222,6 +224,7 @@ function App() {
           showHero={showHero}
           isBackendConnected={isBackendConnected}
           pipelineState={pipelineState}
+          telemetry={telemetry}
         />
         
         <BrainTerminal 

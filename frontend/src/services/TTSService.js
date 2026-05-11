@@ -9,6 +9,8 @@
 let currentAudio = null;
 let audioContext = null;
 let sourceNode = null;
+let analyser = null;
+let dataArray = null;
 
 const TTSService = {
   /**
@@ -18,6 +20,15 @@ const TTSService = {
   getAudioContext() {
     if (!audioContext) {
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Setup Analyser
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+      
+      // Connect analyser to destination
+      analyser.connect(audioContext.destination);
     }
     if (audioContext.state === 'suspended') {
       audioContext.resume();
@@ -89,7 +100,9 @@ const TTSService = {
       
       sourceNode = ctx.createBufferSource();
       sourceNode.buffer = audioBuffer;
-      sourceNode.connect(ctx.destination);
+      
+      // Connect to analyser instead of destination directly
+      sourceNode.connect(analyser);
       
       return new Promise((resolve) => {
         sourceNode.onended = () => {
@@ -176,6 +189,25 @@ const TTSService = {
     const isAudioPlaying = currentAudio ? !currentAudio.paused : false;
     const isNodePlaying = !!sourceNode;
     return isSpeechPlaying || isAudioPlaying || isNodePlaying;
+  },
+
+  /**
+   * getFrequencyData
+   * Returns the average frequency intensity (0-1).
+   */
+  getFrequencyData() {
+    if (!analyser || !dataArray) return 0;
+    
+    analyser.getByteFrequencyData(dataArray);
+    
+    // Calculate average volume/intensity from frequency bins
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    
+    const average = sum / dataArray.length;
+    return average / 255; // Normalize to 0-1
   }
 };
 

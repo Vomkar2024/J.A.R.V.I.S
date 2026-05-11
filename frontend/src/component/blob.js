@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import TTSService from '../services/TTSService';
 
 /**
  * SHADERS
@@ -101,7 +102,7 @@ const SHADERS = {
  * This is the visual representation of the AI. It uses 3D graphics (Three.js)
  * to create a glowing, pulsing sphere of particles.
  */
-const FireAIBlob = ({ color, sensitivity, volume }) => {
+const FireAIBlob = ({ color, sensitivity, volume, pipelineState = 'idle' }) => {
   const containerRef = useRef(null); // Reference to the HTML element where the 3D scene lives
   const requestRef = useRef();      // Reference to the animation loop
   const materialRef = useRef();     // Reference to the blob's visual "material"
@@ -110,6 +111,7 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
   const sensitivityRef = useRef(sensitivity);
   const colorRef = useRef(color);
   const volumeRef = useRef(volume || 0);
+  const pipelineStateRef = useRef(pipelineState);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -180,11 +182,17 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
      * This function runs at 60 frames per second to update the visual.
      */
     let time = 0;
+    const visionColor = new THREE.Color('#9c27b0'); // Deep Purple/Violet
+
     const animate = () => {
       time += 0.02; // Keeps the "fire" moving
 
-      // Calculate how much the blob should pulse based on voice volume (increased multiplier for better sensitivity)
-      const audioIntensity = volumeRef.current * 10.0 * (sensitivityRef.current || 1.0); 
+      // Calculate how much the blob should pulse based on voice volume 
+      // (Mixes User Microphone and Jarvis's own TTS frequency)
+      const ttsIntensity = TTSService.getFrequencyData() * 1.5;
+      const micIntensity = volumeRef.current * 10.0;
+      
+      const audioIntensity = (micIntensity + ttsIntensity) * (sensitivityRef.current || 1.0); 
       const targetIntensity = Math.max(audioIntensity, mouseIntensity);
 
       // Smoothly transition between intensity levels (increased smoothing for better responsiveness)
@@ -198,9 +206,9 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
         materialRef.current.uniforms.mouse.value = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
         materialRef.current.uniforms.intensity.value = currentIntensity;
         
-        targetColorObj.set(colorRef.current);
-        // Smoothly transition the color if the user changes it in settings
-        materialRef.current.uniforms.uColor.value.lerp(targetColorObj, 0.05);
+        const targetColor = pipelineStateRef.current === 'observing' ? visionColor : targetColorObj.set(colorRef.current);
+        // Smoothly transition the color if the user changes it in settings or if vision is active
+        materialRef.current.uniforms.uColor.value.lerp(targetColor, 0.05);
       }
 
       // Draw the updated frame
@@ -235,6 +243,10 @@ const FireAIBlob = ({ color, sensitivity, volume }) => {
   useEffect(() => {
     volumeRef.current = volume;
   }, [volume]);
+
+  useEffect(() => {
+    pipelineStateRef.current = pipelineState;
+  }, [pipelineState]);
 
   return (
     <div

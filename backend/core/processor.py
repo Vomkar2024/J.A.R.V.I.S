@@ -7,6 +7,12 @@ import base64
 import vosk
 from groq import Groq
 import edge_tts
+from core.tool_registry import TOOL_DEFINITIONS, execute_tool
+from core.memory import JarvisMemory
+from core.vision import JarvisVision
+import subprocess
+import glob
+import os
 
 class JarvisProcessor:
     """
@@ -27,6 +33,12 @@ class JarvisProcessor:
             "slightly sarcastic but always helpful and loyal. Keep your responses concise and efficient. "
             "Respond in 2-3 sentences maximum for voice conversations."
         )
+        
+        # Initialize Long-Term Memory (ChromaDB)
+        self.memory = JarvisMemory()
+        
+        # Initialize Vision Processing
+        self.vision = JarvisVision()
         
         # Conversation memory (last N exchanges)
         self.conversation_history = []
@@ -96,22 +108,102 @@ class JarvisProcessor:
             return ""
 
     async def ask_llm(self, text: str) -> str:
-        """Gets a response from Groq LLM (non-streaming fallback)."""
+        """Gets a response from Groq LLM (non-streaming fallback, handles tools & memory)."""
         try:
             self._add_to_history("user", text)
             
-            messages = [{"role": "system", "content": self.system_prompt}]
+            # Retrieve relevant past memories (RAG)
+            relevant_context = self.memory.query_memory(text)
+            
+            messages = [{"role": "system", "content": self.system_prompt + relevant_context}]
             messages.extend(self.conversation_history)
             
+            # Initial LLM call with tools
             completion = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=messages,
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
                 temperature=0.7,
-                max_tokens=300,
-                stream=False
+                max_tokens=300
             )
-            response = completion.choices[0].message.content
+            
+            response_message = completion.choices[0].message
+            tool_calls = response_message.tool_calls
+            
+            # If the model wants to call tools
+            if tool_calls:
+                messages.append(response_message)
+                
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    print(f"[Processor] Executing tool: {function_name}")
+                    
+                    function_response = execute_tool(function_name, function_args)
+                    
+                    if function_response == "MEMORY_PURGE_REQUESTED":
+                        self.memory.clear_all_memories()
+                        function_response = "Memory wiped successfully, sir."
+                    elif function_response == "VISION_REQUESTED":
+                        query = function_args.get("query", "What is on the screen?")
+                        print(f"[Processor] Activating Vision: {query}")
+                        # We could emit a signal here if we had the websocket context, 
+                        # but in non-streaming fallback we just process it.
+                        function_response = self.vision.analyze_screen(query)
+                    elif function_response == "CREATE_FILE_REQUESTED":
+                        path = function_args.get("path")
+                        content = function_args.get("content")
+                        try:
+                            # Ensure parent directories exist
+                            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                            with open(path, "w", encoding="utf-8") as f:
+                                f.write(content)
+                            function_response = f"File created successfully at {path}."
+                        except Exception as e:
+                            function_response = f"Error creating file: {str(e)}"
+                    elif function_response == "SEARCH_FILES_REQUESTED":
+                        query = function_args.get("query")
+                        root = function_args.get("root_dir", ".")
+                        try:
+                            matches = glob.glob(os.path.join(root, "**", query), recursive=True)
+                            function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
+                        except Exception as e:
+                            function_response = f"Error searching files: {str(e)}"
+                    elif function_response == "TERMINAL_EXECUTION_REQUESTED":
+                        command = function_args.get("command")
+                        print(f"[Processor] Executing Terminal: {command}")
+                        try:
+                            # Running in a subprocess and capturing output
+                            # Note: In a real Jarvis, you'd want more safety/confirmation
+                            result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
+                            function_response = f"Command Output: {result[:500]}..."
+                        except subprocess.CalledProcessError as e:
+                            function_response = f"Command failed: {e.output[:500]}..."
+                        except Exception as e:
+                            function_response = f"Error: {str(e)}"
+                    
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": function_response,
+                    })
+                
+                # Second LLM call with tool results
+                second_completion = self.client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                )
+                response = second_completion.choices[0].message.content
+            else:
+                response = response_message.content
+                
             self._add_to_history("assistant", response)
+            
+            # Store this exchange in long-term memory
+            self.memory.store_memory(text, response)
+            
             return response
         except Exception as e:
             print(f"LLM Error: {e}")
@@ -120,21 +212,100 @@ class JarvisProcessor:
     def stream_llm(self, text: str):
         """
         Streams LLM response token by token (generator).
-        Returns an iterator of text chunks for real-time display.
+        Note: Tool calling is handled synchronously before streaming the final response.
+        Memory retrieval (RAG) is performed before the first LLM call.
         """
         try:
             self._add_to_history("user", text)
             
-            messages = [{"role": "system", "content": self.system_prompt}]
+            # Retrieve relevant past memories (RAG)
+            relevant_context = self.memory.query_memory(text)
+            
+            messages = [{"role": "system", "content": self.system_prompt + relevant_context}]
             messages.extend(self.conversation_history)
             
-            stream = self.client.chat.completions.create(
+            # 1. Check if tool calling is needed (non-streaming first)
+            initial_check = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=messages,
-                temperature=0.7,
-                max_tokens=300,
-                stream=True
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
+                max_tokens=300
             )
+            
+            response_message = initial_check.choices[0].message
+            tool_calls = response_message.tool_calls
+            
+            if tool_calls:
+                messages.append(response_message)
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    print(f"[Processor] Executing tool: {function_name}")
+                    
+                    function_response = execute_tool(function_name, function_args)
+                    
+                    if function_response == "MEMORY_PURGE_REQUESTED":
+                        self.memory.clear_all_memories()
+                        function_response = "Memory wiped successfully, sir."
+                    elif function_response == "VISION_REQUESTED":
+                        query = function_args.get("query", "What is on the screen?")
+                        print(f"[Processor] Activating Vision: {query}")
+                        # Provide a visual hint to the generator that vision is active
+                        yield "[VISION_ACTIVE]" 
+                        function_response = self.vision.analyze_screen(query)
+                        yield "[VISION_ENDED]"
+                    elif function_response == "CREATE_FILE_REQUESTED":
+                        path = function_args.get("path")
+                        content = function_args.get("content")
+                        try:
+                            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                            with open(path, "w", encoding="utf-8") as f:
+                                f.write(content)
+                            function_response = f"File created successfully at {path}."
+                        except Exception as e:
+                            function_response = f"Error creating file: {str(e)}"
+                    elif function_response == "SEARCH_FILES_REQUESTED":
+                        query = function_args.get("query")
+                        root = function_args.get("root_dir", ".")
+                        try:
+                            matches = glob.glob(os.path.join(root, "**", query), recursive=True)
+                            function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
+                        except Exception as e:
+                            function_response = f"Error searching files: {str(e)}"
+                    elif function_response == "TERMINAL_EXECUTION_REQUESTED":
+                        command = function_args.get("command")
+                        print(f"[Processor] Executing Terminal: {command}")
+                        try:
+                            result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
+                            function_response = f"Command Output: {result[:500]}..."
+                        except subprocess.CalledProcessError as e:
+                            function_response = f"Command failed: {e.output[:500]}..."
+                        except Exception as e:
+                            function_response = f"Error: {str(e)}"
+                    
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": function_response,
+                    })
+                
+                # After tool execution, stream the final response
+                stream = self.client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    stream=True
+                )
+            else:
+                # No tool calls, stream the original response
+                stream = self.client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=300,
+                    stream=True
+                )
             
             full_response = ""
             for chunk in stream:
@@ -143,8 +314,10 @@ class JarvisProcessor:
                     full_response += token
                     yield token
             
-            # Save full response to history after streaming completes
             self._add_to_history("assistant", full_response)
+            
+            # Store this exchange in long-term memory
+            self.memory.store_memory(text, full_response)
             
         except Exception as e:
             print(f"LLM Stream Error: {e}")

@@ -49,7 +49,59 @@ async def websocket_endpoint(ws: WebSocket):
         Raw MP3 audio bytes for TTS playback
     """
     await ws.accept()
-    print("[WS] Client connected")
+    async def telemetry_loop():
+        """Background task to send system telemetry and monitor trends."""
+        try:
+            import psutil
+            cpu_history = []
+            while True:
+                cpu = psutil.cpu_percent()
+                ram = psutil.virtual_memory().percent
+                
+                # Trend analysis for predictive telemetry
+                cpu_history.append(cpu)
+                if len(cpu_history) > 6:  # 6 * 5s = 30s window
+                    cpu_history.pop(0)
+                
+                avg_cpu = sum(cpu_history) / len(cpu_history)
+                is_critical = avg_cpu > 90 and len(cpu_history) == 6
+                
+                await ws.send_text(json.dumps({
+                    "type": "telemetry",
+                    "data": {
+                        "cpu": cpu,
+                        "ram": ram,
+                        "status": "critical" if is_critical else ("warning" if cpu > 80 else "nominal")
+                    }
+                }))
+                
+                # Proactive warning if critical
+                if is_critical:
+                    warning_text = "Sir, I've noticed a sustained CPU spike over the last 30 seconds. Shall I investigate which background processes are causing this load?"
+                    await ws.send_text(json.dumps({"type": "token", "data": f"\n[SYSTEM ALERT]: {warning_text}\n"}))
+                    # Note: We could also trigger a TTS call here if we wanted him to speak proactively.
+                
+                await asyncio.sleep(5)
+        except Exception as e:
+            print(f"[WS] Telemetry Error: {e}")
+
+    # Server-side keep-alive — sends WebSocket protocol-level pings
+    # to keep the connection alive through proxies and firewalls
+    async def keepalive_loop():
+        """Send protocol-level WebSocket pings to prevent proxy timeouts."""
+        try:
+            while True:
+                await asyncio.sleep(20)  # Every 20 seconds
+                try:
+                    await ws.send_text(json.dumps({"type": "pong", "timestamp": 0}))
+                except Exception:
+                    break
+        except asyncio.CancelledError:
+            pass
+
+    # Start background tasks
+    telemetry_task = asyncio.create_task(telemetry_loop())
+    keepalive_task = asyncio.create_task(keepalive_loop())
     
     try:
         while True:
@@ -57,6 +109,14 @@ async def websocket_endpoint(ws: WebSocket):
             data = await ws.receive_text()
             message = json.loads(data)
             msg_type = message.get("type", "")
+            
+            # Heartbeat — respond to ping immediately
+            if msg_type == "ping":
+                await ws.send_text(json.dumps({
+                    "type": "pong", 
+                    "timestamp": message.get("timestamp", 0)
+                }))
+                continue
             
             if msg_type == "chat":
                 user_text = message.get("text", "").strip()
@@ -72,9 +132,15 @@ async def websocket_endpoint(ws: WebSocket):
                 full_response = ""
                 try:
                     for token in processor.stream_llm(user_text):
+                        if token == "[VISION_ACTIVE]":
+                            await ws.send_text(json.dumps({"type": "status", "data": "observing"}))
+                            continue
+                        if token == "[VISION_ENDED]":
+                            await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
+                            continue
+                            
                         full_response += token
                         await ws.send_text(json.dumps({"type": "token", "data": token}))
-                        # Small yield to prevent blocking the event loop
                         await asyncio.sleep(0)
                 except Exception as e:
                     print(f"[WS] LLM Stream Error: {e}")
@@ -110,11 +176,11 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         print("[WS] Client disconnected")
     except Exception as e:
-        print(f"[WS] Error: {e}")
-        try:
-            await ws.send_text(json.dumps({"type": "error", "data": str(e)}))
-        except:
-            pass
+        print(f"[WS] Unexpected error: {e}")
+    finally:
+        telemetry_task.cancel()
+        keepalive_task.cancel()
+        print("[WS] Connection cleanup complete")
 
 # ============================================================
 # REST Endpoints — Fallback / Direct API Access

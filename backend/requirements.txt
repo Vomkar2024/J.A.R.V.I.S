@@ -8,3 +8,7 @@ aiofiles
 pydantic
 websockets
 vosk
+psutil
+chromadb
+pyautogui
+pillow
