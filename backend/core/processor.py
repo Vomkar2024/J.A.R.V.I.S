@@ -7,12 +7,12 @@ import base64
 import vosk
 from groq import Groq
 import edge_tts
+from duckduckgo_search import DDGS
 from core.tool_registry import TOOL_DEFINITIONS, execute_tool
 from core.memory import JarvisMemory
 from core.vision import JarvisVision
 import subprocess
 import glob
-import os
 
 class JarvisProcessor:
     """
@@ -26,12 +26,14 @@ class JarvisProcessor:
         self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp")
         os.makedirs(self.temp_dir, exist_ok=True)
         
-        # System Prompt for J.A.R.V.I.S personality
+        # J.A.R.V.I.S Settings
+        self.voice = "en-GB-RyanNeural"
         self.system_prompt = (
-            "You are J.A.R.V.I.S., a highly intelligent, witty, and sophisticated AI assistant "
-            "created by Tony Stark (but currently serving the user). Your tone is professional, "
-            "slightly sarcastic but always helpful and loyal. Keep your responses concise and efficient. "
-            "Respond in 2-3 sentences maximum for voice conversations."
+            "You are J.A.R.V.I.S., the sophisticated AI from the Marvel movies. "
+            "You are currently using the movie-accurate voice profile from the integrated "
+            "Voice Pack. Your tone is dry, British, witty, and extremely loyal. "
+            "Respond as if you are actually JARVIS assisting YOU (the user), your creator. "
+            "Keep responses concise and elegant."
         )
         
         # Initialize Long-Term Memory (ChromaDB)
@@ -190,6 +192,15 @@ class JarvisProcessor:
                             function_response = f"File Content of {path}:\n{content[:2000]}"
                         except Exception as e:
                             function_response = f"Error reading file: {str(e)}"
+                    elif function_response == "WEB_SEARCH_REQUESTED":
+                        query = function_args.get("query")
+                        print(f"[Processor] Searching the web for: {query}")
+                        try:
+                            with DDGS() as ddgs:
+                                results = [r for r in ddgs.text(query, max_results=5)]
+                                function_response = json.dumps(results)
+                        except Exception as e:
+                            function_response = f"Search failed: {str(e)}"
                     
                     messages.append({
                         "tool_call_id": tool_call.id,
@@ -218,6 +229,36 @@ class JarvisProcessor:
             print(f"LLM Error: {e}")
             return "I'm sorry, sir. I'm having trouble accessing my neural network at the moment."
 
+    def load_initial_memory(self):
+        """Loads the most recent memories into the starting conversation history."""
+        try:
+            # Query the last few memories
+            results = self.memory.collection.get(
+                limit=5,
+                include=["documents", "metadatas"]
+            )
+            
+            docs = results.get("documents", [])
+            
+            if not docs:
+                return
+                
+            # Chroma get() might not return in order, but for now we'll take the 5 most recent
+            for i in range(len(docs)-1, -1, -1):
+                content = docs[i]
+                # Try to parse "User: ... \nJarvis: ..."
+                if "User:" in content and "Jarvis:" in content:
+                    parts = content.split("Jarvis:")
+                    user_text = parts[0].replace("User:", "").strip()
+                    ai_text = parts[1].strip()
+                    
+                    self.conversation_history.append({"role": "user", "content": user_text})
+                    self.conversation_history.append({"role": "assistant", "content": ai_text})
+            
+            print(f"[Processor] Recalled {len(docs)} recent conversation units.")
+        except Exception as e:
+            print(f"[Processor] Error recalling initial memory: {e}")
+
     def stream_llm(self, text: str):
         """
         Streams LLM response token by token (generator).
@@ -229,6 +270,11 @@ class JarvisProcessor:
             
             # Retrieve relevant past memories (RAG)
             relevant_context = self.memory.query_memory(text)
+            
+            if relevant_context:
+                yield "[MEMORY_ACTIVE]"
+                # Send the memory data as a hidden signal (or we could just use it)
+                # yield f"[MEMORY_DATA:{relevant_context}]"
             
             messages = [{"role": "system", "content": self.system_prompt + relevant_context}]
             messages.extend(self.conversation_history)
@@ -264,42 +310,66 @@ class JarvisProcessor:
                         yield "[VISION_ACTIVE]" 
                         function_response = self.vision.analyze_screen(query)
                         yield "[VISION_ENDED]"
-                    elif function_response == "CREATE_FILE_REQUESTED":
-                        path = function_args.get("path")
-                        content = function_args.get("content")
-                        try:
-                            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-                            with open(path, "w", encoding="utf-8") as f:
-                                f.write(content)
-                            function_response = f"File created successfully at {path}."
-                        except Exception as e:
-                            function_response = f"Error creating file: {str(e)}"
-                    elif function_response == "READ_FILE_REQUESTED":
-                        path = function_args.get("path")
-                        try:
-                            with open(path, "r", encoding="utf-8") as f:
-                                content = f.read()
-                            function_response = f"File Content of {path}:\n{content[:2000]}"
-                        except Exception as e:
-                            function_response = f"Error reading file: {str(e)}"
-                    elif function_response == "SEARCH_FILES_REQUESTED":
-                        query = function_args.get("query")
-                        root = function_args.get("root_dir", ".")
-                        try:
-                            matches = glob.glob(os.path.join(root, "**", query), recursive=True)
-                            function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
-                        except Exception as e:
-                            function_response = f"Error searching files: {str(e)}"
-                    elif function_response == "TERMINAL_EXECUTION_REQUESTED":
-                        command = function_args.get("command")
-                        print(f"[Processor] Executing Terminal: {command}")
-                        try:
-                            result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
-                            function_response = f"Command Output: {result[:500]}..."
-                        except subprocess.CalledProcessError as e:
-                            function_response = f"Command failed: {e.output[:500]}..."
-                        except Exception as e:
-                            function_response = f"Error: {str(e)}"
+                    else:
+                        # Generic tool use signal
+                        yield f"[TOOL_START:{function_name.upper()}]"
+                        
+                        if function_response == "CREATE_FILE_REQUESTED":
+                            path = function_args.get("path")
+                            content = function_args.get("content")
+                            try:
+                                os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                                with open(path, "w", encoding="utf-8") as f:
+                                    f.write(content)
+                                function_response = f"File created successfully at {path}."
+                            except Exception as e:
+                                function_response = f"Error creating file: {str(e)}"
+                        elif function_response == "READ_FILE_REQUESTED":
+                            path = function_args.get("path")
+                            try:
+                                with open(path, "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                function_response = f"File Content of {path}:\n{content[:2000]}"
+                            except Exception as e:
+                                function_response = f"Error reading file: {str(e)}"
+                        elif function_response == "SEARCH_FILES_REQUESTED":
+                            query = function_args.get("query")
+                            root = function_args.get("root_dir", ".")
+                            try:
+                                matches = glob.glob(os.path.join(root, "**", query), recursive=True)
+                                function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
+                            except Exception as e:
+                                function_response = f"Error searching files: {str(e)}"
+                        elif function_response == "WEB_SEARCH_REQUESTED":
+                            query = function_args.get("query")
+                            print(f"[Processor] Searching the web for: {query}")
+                            try:
+                                with DDGS() as ddgs:
+                                    results = [r for r in ddgs.text(query, max_results=5)]
+                                    function_response = json.dumps(results)
+                            except Exception as e:
+                                function_response = f"Search failed: {str(e)}"
+                        elif function_response == "WEATHER_REQUESTED":
+                            location = function_args.get("location")
+                            print(f"[Processor] Fetching weather for: {location}")
+                            try:
+                                with DDGS() as ddgs:
+                                    results = [r for r in ddgs.text(f"current weather in {location}", max_results=3)]
+                                    function_response = json.dumps(results)
+                            except Exception as e:
+                                function_response = f"Could not fetch weather: {str(e)}"
+                        elif function_response == "TERMINAL_EXECUTION_REQUESTED":
+                            command = function_args.get("command")
+                            print(f"[Processor] Executing Terminal: {command}")
+                            try:
+                                result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
+                                function_response = f"Command Output: {result[:500]}..."
+                            except subprocess.CalledProcessError as e:
+                                function_response = f"Command failed: {e.output[:500]}..."
+                            except Exception as e:
+                                function_response = f"Error: {str(e)}"
+                        
+                        yield f"[TOOL_END:{function_name.upper()}]"
                     
                     messages.append({
                         "tool_call_id": tool_call.id,
@@ -385,7 +455,7 @@ class JarvisProcessor:
         
         try:
             # Using RyanNeural for that sophisticated British-adjacent tone
-            communicate = edge_tts.Communicate(text, "en-GB-RyanNeural")
+            communicate = edge_tts.Communicate(text, self.voice)
             await communicate.save(temp_path)
             return temp_path
         except Exception as e:
@@ -395,8 +465,8 @@ class JarvisProcessor:
     async def text_to_speech_bytes(self, text: str) -> bytes:
         """Converts text to audio bytes using Edge TTS. Returns raw MP3 bytes."""
         try:
-            # Consistent with tts_service.py VOICE variable
-            communicate = edge_tts.Communicate(text, "en-GB-RyanNeural")
+            # Consistent with system voice
+            communicate = edge_tts.Communicate(text, self.voice)
             audio_data = b""
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":

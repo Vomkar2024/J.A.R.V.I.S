@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './css/SplashScreen.css';
 import splashGif from '../img/slashscreen.gif';
 
-const SPLASH_DURATION = 8000;
-const FADE_DURATION = 800;
+import { SPLASH_DURATION, FADE_DURATION } from '../constants';
 
 /**
  * SplashScreen Component

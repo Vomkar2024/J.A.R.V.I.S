@@ -12,3 +12,4 @@ psutil
 chromadb
 pyautogui
 pillow
+duckduckgo-search

@@ -1,12 +1,20 @@
 import os
 import json
 import asyncio
+import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from core.processor import JarvisProcessor
 from dotenv import load_dotenv, find_dotenv
+
+# Optional dependency for telemetry
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
 
 load_dotenv(find_dotenv())
 
@@ -51,8 +59,11 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     async def telemetry_loop():
         """Background task to send system telemetry and monitor trends."""
+        if not HAS_PSUTIL:
+            print("[WS] Telemetry disabled: psutil not installed")
+            return
+
         try:
-            import psutil
             cpu_history = []
             while True:
                 cpu = psutil.cpu_percent()
@@ -102,6 +113,21 @@ async def websocket_endpoint(ws: WebSocket):
     # Start background tasks
     telemetry_task = asyncio.create_task(telemetry_loop())
     keepalive_task = asyncio.create_task(keepalive_loop())
+
+    # Load initial memory from DB (Disabled for "no history" requirement)
+    # processor.load_initial_memory()
+    # if processor.conversation_history:
+    #     frontend_history = []
+    #     for msg in processor.conversation_history:
+    #         role = 'user' if msg['role'] == 'user' else 'assistant'
+    #         frontend_history.append({
+    #             "role": role,
+    #             "text": msg['content'],
+    #             "timestamp": datetime.datetime.now().isoformat()
+    #         })
+    #     await ws.send_text(json.dumps({"type": "history_load", "data": frontend_history}))
+
+    await ws.send_text(json.dumps({"type": "status", "data": "idle"}))
     
     try:
         while True:
@@ -136,6 +162,19 @@ async def websocket_endpoint(ws: WebSocket):
                             await ws.send_text(json.dumps({"type": "status", "data": "observing"}))
                             continue
                         if token == "[VISION_ENDED]":
+                            await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
+                            continue
+                        if token == "[MEMORY_ACTIVE]":
+                            # Signal that memory is being accessed
+                            await ws.send_text(json.dumps({"type": "status", "data": "memory_access"}))
+                            continue
+                        
+                        if token.startswith("[TOOL_START:"):
+                            tool_name = token.replace("[TOOL_START:", "").replace("]", "")
+                            await ws.send_text(json.dumps({"type": "status", "data": "tool_use", "tool": tool_name}))
+                            continue
+                        
+                        if token.startswith("[TOOL_END:"):
                             await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
                             continue
                             

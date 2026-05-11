@@ -9,9 +9,12 @@ import SplashScreen from './component/SplashScreen';
 import Hero from './component/Hero';
 import VoiceControl from './component/VoiceControl';
 import BrainTerminal from './component/BrainTerminal';
-import PuterStatus from './component/PuterStatus';
+import NeuralEngineStatus from './component/PuterStatus';
 import SystemAlert from './component/SystemAlert';
 import SystemStatus from './component/SystemStatus';
+
+// Constants
+import { HERO_TIMEOUT, ALERTS } from './constants';
 
 // Hooks
 import { useSpeech } from './hooks/useSpeech';
@@ -54,6 +57,7 @@ function App() {
     isSpeaking,
     isBackendConnected,
     pipelineState,
+    activeTool,
     conversationHistory,
     telemetry,
     sendMessage,
@@ -98,7 +102,7 @@ function App() {
   // Handle hero screen transition
   useEffect(() => {
     if (!isLoading) {
-      const timer = setTimeout(() => setShowHero(false), 5000);
+      const timer = setTimeout(() => setShowHero(false), HERO_TIMEOUT);
       return () => clearTimeout(timer);
     }
   }, [isLoading]);
@@ -115,9 +119,9 @@ function App() {
       
       const success = await startSpeech();
       if (success) {
-        setAlert({ message: 'Neural Link Established', isVisible: true });
+        setAlert({ message: ALERTS.LINK_ESTABLISHED, isVisible: true });
       } else {
-        setAlert({ message: 'Neural Link Failed: Check Permissions', isVisible: true });
+        setAlert({ message: ALERTS.LINK_FAILED, isVisible: true });
       }
     } catch (error) {
       console.error('System Crash during initialization:', error);
@@ -131,12 +135,12 @@ function App() {
 
   const handleSave = useCallback(() => {
     localStorage.setItem('blobSettings', JSON.stringify(blobSettings));
-    setAlert({ message: 'Memory Updated', isVisible: true });
+    setAlert({ message: ALERTS.MEMORY_UPDATED, isVisible: true });
   }, [blobSettings]);
 
   const handleReset = useCallback(() => {
     setBlobSettings(DEFAULT_SETTINGS);
-    setAlert({ message: 'All settings are reset', isVisible: true });
+    setAlert({ message: ALERTS.SETTINGS_RESET, isVisible: true });
     localStorage.removeItem('blobSettings');
   }, []);
 
@@ -224,6 +228,7 @@ function App() {
           showHero={showHero}
           isBackendConnected={isBackendConnected}
           pipelineState={pipelineState}
+          activeTool={activeTool}
           telemetry={telemetry}
         />
         
@@ -234,9 +239,11 @@ function App() {
           conversationHistory={conversationHistory}
           isVisible={showTerminal && !showHero}
           pipelineState={pipelineState}
+          activeTool={activeTool}
+          onSendMessage={sendMessage}
         />
 
-        <PuterStatus isProcessing={isThinking || isSpeaking} />
+        <NeuralEngineStatus isProcessing={isThinking || isSpeaking} />
 
         <SystemAlert 
           message={alert.message} 

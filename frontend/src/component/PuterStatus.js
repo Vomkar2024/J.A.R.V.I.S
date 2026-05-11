@@ -2,21 +2,21 @@ import React from 'react';
 import './css/PuterStatus.css';
 
 /**
- * PuterStatus Component
- * Displays a small, futuristic indicator when the Puter.js AI is processing speech.
+ * NeuralEngineStatus Component
+ * Displays a small, futuristic indicator when J.A.R.V.I.S is processing data.
  */
-const PuterStatus = ({ isProcessing }) => {
+const NeuralEngineStatus = ({ isProcessing }) => {
   if (!isProcessing) return null;
 
   return (
-    <div className="puter-status">
-      <div className="status-orb"></div>
-      <span className="status-label">NEURAL ENGINE ACTIVE</span>
-      <div className="loading-bar">
-        <div className="bar-progress"></div>
+    <div className="neural-engine-status">
+      <div className="engine-orb"></div>
+      <span className="engine-label">NEURAL ENGINE ACTIVE</span>
+      <div className="engine-bar">
+        <div className="engine-progress"></div>
       </div>
     </div>
   );
 };
 
-export default PuterStatus;
+export default NeuralEngineStatus;

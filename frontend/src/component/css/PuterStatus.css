@@ -1,4 +1,4 @@
-.puter-status {
+.neural-engine-status {
     position: fixed;
     bottom: 2rem;
     left: 2rem;
@@ -9,12 +9,12 @@
     animation: fadeIn 0.3s ease-out;
 }
 
-.status-orb {
+.engine-orb {
     width: 12px;
     height: 12px;
-    background: #38bdf8;
+    background: var(--fire-orange, #ff6b00);
     border-radius: 50%;
-    box-shadow: 0 0 15px #38bdf8;
+    box-shadow: 0 0 15px var(--fire-orange, #ff6b00);
     animation: orbPulse 1s infinite alternate;
 }
 
@@ -23,26 +23,26 @@
     to { opacity: 1; transform: scale(1.1); }
 }
 
-.status-label {
+.engine-label {
     font-family: 'Orbitron', sans-serif;
     font-size: 0.6rem;
-    color: #38bdf8;
+    color: var(--fire-yellow, #ffd700);
     letter-spacing: 2px;
     font-weight: 700;
 }
 
-.loading-bar {
+.engine-bar {
     width: 150px;
     height: 2px;
-    background: rgba(56, 189, 248, 0.1);
+    background: rgba(255, 107, 0, 0.1);
     border-radius: 1px;
     overflow: hidden;
 }
 
-.bar-progress {
+.engine-progress {
     width: 40%;
     height: 100%;
-    background: #38bdf8;
+    background: linear-gradient(90deg, #ff6b00, #ff2d00);
     animation: loadingMove 2s infinite linear;
 }
 

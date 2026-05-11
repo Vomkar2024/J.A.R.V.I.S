@@ -3,6 +3,7 @@ import platform
 import datetime
 import subprocess
 import os
+from duckduckgo_search import DDGS
 
 class JarvisTools:
     """
@@ -67,6 +68,17 @@ class JarvisTools:
     def read_file(path: str):
         """Reads the content of a file at the specified path."""
         return "READ_FILE_REQUESTED"
+
+    @staticmethod
+    def web_search(query: str):
+        """Searches the web for information using DuckDuckGo."""
+        return "WEB_SEARCH_REQUESTED"
+
+    @staticmethod
+    def get_weather(location: str):
+        """Gets the current weather for a specified location."""
+        # This will be handled by the processor using web search or a mock
+        return "WEATHER_REQUESTED"
 
 # Tool Definitions for Groq API
 TOOL_DEFINITIONS = [
@@ -206,6 +218,40 @@ TOOL_DEFINITIONS = [
                 "required": ["path"]
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the internet for real-time information, news, or general knowledge.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query."
+                    }
+                },
+                "required": ["query"]
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a specific city or location.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and country (e.g., 'London, UK')."
+                    }
+                },
+                "required": ["location"]
+            },
+        },
     }
 ]
 
@@ -230,6 +276,10 @@ def execute_tool(tool_name: str, arguments: dict):
             return JarvisTools.search_files(arguments.get("query"), arguments.get("root_dir", "."))
         elif tool_name == "read_file":
             return JarvisTools.read_file(arguments.get("path"))
+        elif tool_name == "web_search":
+            return JarvisTools.web_search(arguments.get("query"))
+        elif tool_name == "get_weather":
+            return JarvisTools.get_weather(arguments.get("location"))
         else:
             return f"Error: Tool '{tool_name}' not found."
     except Exception as e:

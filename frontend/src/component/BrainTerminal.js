@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import './css/BrainTerminal.css';
+import { STATUS_LABELS } from '../constants';
 
 /**
  * BrainTerminal Component
  * The advanced communication hub for J.A.R.V.I.S.
  * Displays real-time streaming AI responses and conversation history.
  */
-const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHistory, isVisible, pipelineState }) => {
+const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHistory, isVisible, pipelineState, activeTool, onSendMessage }) => {
   const scrollRef = useRef(null);
 
   // Auto-scroll when new content appears
@@ -18,8 +19,6 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
 
   if (!isVisible) return null;
 
-  // Get the last few messages to display
-  const recentMessages = conversationHistory.slice(-10);
 
   return (
     <div className="brain-terminal">
@@ -36,25 +35,32 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
           <div className={`status-indicator ${isThinking ? 'thinking' : pipelineState === 'speaking' ? 'speaking' : 'active'}`}>
             <div className="status-circle"></div>
             <span className="status-label">
-              {isThinking ? 'NEURAL_PROCESSING' : pipelineState === 'speaking' ? 'VOICE_OUTPUT' : 'STABLE_CONNECTION'}
+              {isThinking ? STATUS_LABELS.THINKING : 
+               pipelineState === 'speaking' ? STATUS_LABELS.SPEAKING : 
+               pipelineState === 'memory_access' ? STATUS_LABELS.MEMORY : 
+               pipelineState === 'observing' ? STATUS_LABELS.OBSERVING :
+               pipelineState === 'tool_use' ? `TOOL_${activeTool}` :
+               STATUS_LABELS.IDLE}
             </span>
           </div>
         </div>
       </div>
 
       <div className="terminal-body" ref={scrollRef}>
-        {/* Conversation History */}
-        {recentMessages.map((msg, index) => (
-          <div key={index} className={`message-segment ${msg.role}`}>
+        {/* Dynamic Interaction Only (No Persistent History) */}
+        {conversationHistory.length > 0 && !streamingText && !isThinking && (
+          <div className={`message-segment ${conversationHistory[conversationHistory.length-1].role}`}>
             <div className="segment-label">
-              {msg.role === 'user' ? '⟩ USER_INPUT' : '⟩ JARVIS_RESPONSE'}
+              {conversationHistory[conversationHistory.length-1].role === 'user' ? '⟩ USER_INPUT' : '⟩ JARVIS_RESPONSE'}
               <span className="timestamp">
-                {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
+                {new Date(conversationHistory[conversationHistory.length-1].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
               </span>
             </div>
-            <p className={`message-text ${msg.role}`}>{msg.text}</p>
+            <p className={`message-text ${conversationHistory[conversationHistory.length-1].role}`}>
+              {conversationHistory[conversationHistory.length-1].text}
+            </p>
           </div>
-        ))}
+        )}
 
         {/* Streaming Text (real-time tokens) */}
         {streamingText && (
@@ -82,8 +88,29 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
 
       <div className="terminal-footer">
         <div className="matrix-bg"></div>
-        <span className="footer-stat">ENGINE: LLAMA-3.1-8B</span>
-        <span className="footer-stat">MODE: {pipelineState?.toUpperCase() || 'IDLE'}</span>
+        <form className="terminal-input-form" onSubmit={(e) => {
+          e.preventDefault();
+          const input = e.target.elements.terminalInput;
+          if (input && input.value.trim()) {
+            if (onSendMessage) {
+              onSendMessage(input.value);
+            }
+            input.value = '';
+          }
+        }}>
+          <span className="input-prompt">⟩</span>
+          <input 
+            name="terminalInput"
+            type="text" 
+            className="terminal-input" 
+            placeholder="Type a command..." 
+            autoComplete="off"
+          />
+        </form>
+        <div className="footer-stats">
+          <span className="footer-stat">ENGINE: LLAMA-3.1-8B</span>
+          <span className="footer-stat">MODE: {pipelineState?.toUpperCase() || 'IDLE'}</span>
+        </div>
       </div>
     </div>
   );

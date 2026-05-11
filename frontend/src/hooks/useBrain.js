@@ -45,8 +45,10 @@ export const useBrain = () => {
   const [isThinking, setIsThinking] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
-  const [pipelineState, setPipelineState] = useState('idle'); // idle | listening | thinking | speaking | observing
+  const [pipelineState, setPipelineState] = useState('idle'); // idle | listening | thinking | speaking | observing | tool_use
+  const [activeTool, setActiveTool] = useState('');
   const [conversationHistory, setConversationHistory] = useState([]);
+  const [systemLogs, setSystemLogs] = useState([]);
   const [telemetry, setTelemetry] = useState({ cpu: 0, ram: 0, status: 'nominal' });
 
   // --- Refs ---
@@ -62,6 +64,16 @@ export const useBrain = () => {
   const isIntentionalCloseRef = useRef(false);
   const connectingRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // Helper to add system logs
+  const addLog = useCallback((message, type = 'info') => {
+    setSystemLogs(prev => [{
+      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      message,
+      type,
+      timestamp: Date.now()
+    }, ...prev].slice(0, 50));
+  }, []);
 
   // ============================================================
   // Heartbeat System — Detect Dead/Zombie Connections
@@ -137,40 +149,6 @@ export const useBrain = () => {
   }, []);
 
   // ============================================================
-  // Reconnection Engine — Exponential Backoff with Jitter
-  // ============================================================
-
-  const getReconnectDelay = useCallback(() => {
-    const baseDelay = Math.min(
-      WS_CONFIG.INITIAL_RECONNECT_DELAY * Math.pow(WS_CONFIG.RECONNECT_DECAY, reconnectAttemptRef.current),
-      WS_CONFIG.MAX_RECONNECT_DELAY
-    );
-    // Add jitter to prevent all clients reconnecting simultaneously
-    const jitter = baseDelay * WS_CONFIG.RECONNECT_JITTER * (Math.random() * 2 - 1);
-    return Math.max(100, Math.round(baseDelay + jitter));
-  }, []);
-
-  const scheduleReconnect = useCallback(() => {
-    if (isIntentionalCloseRef.current || !mountedRef.current) return;
-    if (reconnectTimerRef.current) return; // Already scheduled
-
-    const delay = getReconnectDelay();
-    reconnectAttemptRef.current += 1;
-
-    console.log(
-      `[WS] 🔄 Reconnect #${reconnectAttemptRef.current} scheduled in ${delay}ms ` +
-      `(backoff: ${Math.round(delay)}ms)`
-    );
-
-    reconnectTimerRef.current = setTimeout(() => {
-      reconnectTimerRef.current = null;
-      if (!isIntentionalCloseRef.current && mountedRef.current) {
-        connectWebSocket();
-      }
-    }, delay);
-  }, [getReconnectDelay]); // connectWebSocket added via circular ref below
-
-  // ============================================================
   // Core Connection — The Iron Link
   // ============================================================
 
@@ -198,6 +176,7 @@ export const useBrain = () => {
       // --- CONNECTION OPENED ---
       ws.onopen = () => {
         console.log('[WS] ✅ Connected to J.A.R.V.I.S backend');
+        addLog('Neural Link established via WebSocket', 'success');
         connectingRef.current = false;
         setIsBackendConnected(true);
 
@@ -263,6 +242,12 @@ export const useBrain = () => {
           console.log('[WS] Received message:', message.type);
           
           switch (message.type) {
+            case 'history_load':
+              if (message.data && Array.isArray(message.data)) {
+                setConversationHistory(message.data);
+                addLog(`Recalled ${message.data.length / 2} previous conversation units`, 'success');
+              }
+              break;
             case 'status':
               if (message.data === 'thinking') {
                 setIsThinking(true);
@@ -278,6 +263,9 @@ export const useBrain = () => {
                 setPipelineState('observing');
               } else if (message.data === 'history_cleared') {
                 setConversationHistory([]);
+              } else if (message.data === 'tool_use') {
+                setPipelineState('tool_use');
+                setActiveTool(message.tool || 'SYSTEM_TASK');
               }
               break;
 
@@ -322,6 +310,7 @@ export const useBrain = () => {
         const reason = event.reason || 'No reason';
 
         console.log(`[WS] ⚡ Disconnected (code: ${code}, clean: ${wasClean}, reason: ${reason})`);
+        addLog(`Link severed: ${reason}`, 'warning');
         
         connectingRef.current = false;
         setIsBackendConnected(false);
@@ -356,7 +345,41 @@ export const useBrain = () => {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startHeartbeat, clearHeartbeat, flushMessageQueue, scheduleReconnect]);
+  }, [startHeartbeat, clearHeartbeat, flushMessageQueue]);
+
+  // ============================================================
+  // Reconnection Engine — Exponential Backoff with Jitter
+  // ============================================================
+
+  const getReconnectDelay = useCallback(() => {
+    const baseDelay = Math.min(
+      WS_CONFIG.INITIAL_RECONNECT_DELAY * Math.pow(WS_CONFIG.RECONNECT_DECAY, reconnectAttemptRef.current),
+      WS_CONFIG.MAX_RECONNECT_DELAY
+    );
+    // Add jitter to prevent all clients reconnecting simultaneously
+    const jitter = baseDelay * WS_CONFIG.RECONNECT_JITTER * (Math.random() * 2 - 1);
+    return Math.max(100, Math.round(baseDelay + jitter));
+  }, []);
+
+  const scheduleReconnect = useCallback(() => {
+    if (isIntentionalCloseRef.current || !mountedRef.current) return;
+    if (reconnectTimerRef.current) return; // Already scheduled
+
+    const delay = getReconnectDelay();
+    reconnectAttemptRef.current += 1;
+
+    console.log(
+      `[WS] 🔄 Reconnect #${reconnectAttemptRef.current} scheduled in ${delay}ms ` +
+      `(backoff: ${Math.round(delay)}ms)`
+    );
+
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      if (!isIntentionalCloseRef.current && mountedRef.current) {
+        connectWebSocket();
+      }
+    }, delay);
+  }, [getReconnectDelay, connectWebSocket]); // Reconnect with backoff
 
   // ============================================================
   // Visibility-Aware Reconnection
@@ -552,7 +575,9 @@ export const useBrain = () => {
     isSpeaking,
     isBackendConnected,
     pipelineState,
+    activeTool,
     conversationHistory,
+    systemLogs,
     telemetry,
     sendMessage,
     clearHistory

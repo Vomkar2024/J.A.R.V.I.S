@@ -1,0 +1,104 @@
+.system-console {
+    position: fixed;
+    bottom: 120px;
+    left: 24px;
+    width: 320px;
+    height: 200px;
+    background: rgba(10, 15, 30, 0.7);
+    backdrop-filter: blur(10px);
+    border-left: 2px solid var(--fire-orange, #ff6b00);
+    border-radius: 0 12px 12px 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 90;
+    animation: consoleSlide 0.5s ease-out;
+}
+
+@keyframes consoleSlide {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.console-header {
+    padding: 8px 12px;
+    background: rgba(255, 107, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 107, 0, 0.1);
+}
+
+.console-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.55rem;
+    color: #ff6b00;
+    letter-spacing: 1px;
+}
+
+.console-status {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.45rem;
+    color: #22c55e;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pulse-dot {
+    width: 4px;
+    height: 4px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.console-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-family: 'monospace';
+    font-size: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.console-body::-webkit-scrollbar {
+    width: 2px;
+}
+
+.console-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 107, 0, 0.2);
+}
+
+.log-entry {
+    display: flex;
+    gap: 6px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+.log-time {
+    color: rgba(148, 163, 184, 0.6);
+    white-space: nowrap;
+}
+
+.log-tag {
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.log-msg {
+    color: #e2e8f0;
+}
+
+.log-entry.success .log-tag { color: #22c55e; }
+.log-entry.warning .log-tag { color: #f59e0b; }
+.log-entry.error .log-tag { color: #ef4444; }
+.log-entry.info .log-tag { color: #38bdf8; }
+.log-entry.system .log-tag { color: #a855f7; }
