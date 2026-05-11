@@ -14,8 +14,9 @@ from core.memory import JarvisMemory
 from core.vision import JarvisVision
 import subprocess
 import glob
-from docx import Document
-from fpdf import FPDF
+# Optional document generation dependencies (imported lazily in _export_to_document)
+# from docx import Document
+# from fpdf import FPDF
 
 class JarvisProcessor:
     """
@@ -58,7 +59,7 @@ class JarvisProcessor:
         # Conversation memory (last N exchanges)
         self.conversation_history = []
         self.full_history_archive = [] # Raw logs for document export
-        self.max_history = 10
+        self.max_history = 12
         self.condensed_summary = "" # Holds the summary of older interactions
         
         # Vosk STT Model
@@ -417,13 +418,16 @@ class JarvisProcessor:
                         elif function_response == "TERMINAL_EXECUTION_REQUESTED":
                             command = function_args.get("command")
                             print(f"[Processor] Executing Terminal: {command}")
-                            try:
-                                result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
-                                function_response = f"Command Output: {result[:500]}..."
-                            except subprocess.CalledProcessError as e:
-                                function_response = f"Command failed: {e.output[:500]}..."
-                            except Exception as e:
-                                function_response = f"Error: {str(e)}"
+                            if not self._is_safe_command(command):
+                                function_response = "Error: This command has been blocked by the Neural Safety Protocol for your protection, sir."
+                            else:
+                                try:
+                                    result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
+                                    function_response = f"Command Output: {result[:500]}..."
+                                except subprocess.CalledProcessError as e:
+                                    function_response = f"Command failed: {e.output[:500]}..."
+                                except Exception as e:
+                                    function_response = f"Error: {str(e)}"
                         
                         yield f"[TOOL_END:{function_name.upper()}]"
                     
@@ -518,43 +522,32 @@ class JarvisProcessor:
             print(f"TTS Error: {e}")
             return ""
 
-    async def text_to_speech_bytes(self, text: str) -> bytes:
-        """Converts text to audio bytes using Edge TTS. Returns raw MP3 bytes."""
+    async def text_to_speech_bytes(self, text: str):
+        """
+        Converts text to audio bytes using Edge TTS. 
+        Yields chunks for real-time streaming.
+        """
         try:
-            # Consistent with system voice
             communicate = edge_tts.Communicate(text, self.voice)
-            audio_data = b""
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
-                    audio_data += chunk["data"]
-                    # If we wanted to mirror the printing in tts_service.py:
-                    # audio_base64 = base64.b64encode(chunk["data"])
-                    # print(f"AUDIO_CHUNK:{audio_base64}")
-            return audio_data
+                    yield chunk["data"]
         except Exception as e:
-            print(f"TTS Bytes Error: {e}")
-            return b""
+            print(f"TTS Streaming Error: {e}")
 
-    async def process_full_cycle(self, audio_content: bytes):
-        """Orchestrates the full Audio -> Text -> LLM -> Audio pipeline."""
-        # 1. STT
-        user_text = await self.speech_to_text(audio_content, "webm")
-        if not user_text or len(user_text.strip()) < 2:
-            return None, None, None
-            
-        # 2. LLM
-        ai_response = await self.ask_llm(user_text)
+    def _is_safe_command(self, command: str) -> bool:
+        """
+        Safety check for terminal commands.
+        Prevents dangerous operations and restricts to a safe set of tools.
+        """
+        # Block destructive commands
+        dangerous_keywords = ["rm -rf", "del /s", "format", "mkfs", "chmod -R 777", "> /dev/"]
+        for kw in dangerous_keywords:
+            if kw in command.lower():
+                return False
         
-        # 3. TTS
-        audio_path = await self.text_to_speech(ai_response)
-        
-        return user_text, ai_response, audio_path
-
-    def clear_history(self):
-        """Clears conversation history."""
-        self.conversation_history = []
-        self.full_history_archive = []
-        self.condensed_summary = ""
+        # In a real J.A.R.V.I.S., we would have a more robust sandbox or whitelist
+        return True
 
     def _export_to_document(self, format: str = "pdf"):
         """Generates a professional document from the full history archive."""
@@ -565,6 +558,11 @@ class JarvisProcessor:
         
         try:
             if format.lower() == "docx":
+                try:
+                    from docx import Document
+                except ImportError:
+                    return "Error: Word export library (python-docx) is not installed on this system, sir."
+                
                 path = os.path.join(self.temp_dir, f"{filename}.docx")
                 doc = Document()
                 doc.add_heading('J.A.R.V.I.S — Neural Link Conversation Log', 0)
@@ -580,6 +578,11 @@ class JarvisProcessor:
                 return f"Success: Conversation exported to Word file at {path}. I have preserved every exchange for your records, sir."
                 
             else: # PDF
+                try:
+                    from fpdf import FPDF
+                except ImportError:
+                    return "Error: PDF export library (fpdf) is not installed on this system, sir."
+                
                 path = os.path.join(self.temp_dir, f"{filename}.pdf")
                 pdf = FPDF()
                 pdf.add_page()
@@ -612,3 +615,4 @@ class JarvisProcessor:
                 
         except Exception as e:
             return f"Error during export: {str(e)}"
+

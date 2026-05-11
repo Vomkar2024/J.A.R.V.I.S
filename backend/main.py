@@ -194,21 +194,17 @@ async def websocket_endpoint(ws: WebSocket):
                 # 3. Send response complete signal
                 await ws.send_text(json.dumps({"type": "response_end", "data": full_response}))
                 
-                # 4. Generate and send TTS audio
+                # 4. Generate and stream TTS audio chunks
                 await ws.send_text(json.dumps({"type": "status", "data": "speaking"}))
+                await ws.send_text(json.dumps({"type": "audio_start"}))
                 
                 try:
-                    print(f"[WS] Generating TTS for: {full_response[:50]}...")
-                    audio_bytes = await processor.text_to_speech_bytes(full_response)
-                    if audio_bytes:
-                        print(f"[WS] Sending {len(audio_bytes)} audio bytes")
-                        await ws.send_text(json.dumps({"type": "audio_start"}))
-                        # Send audio as binary
-                        await ws.send_bytes(audio_bytes)
-                    else:
-                        print("[WS] TTS generation returned no bytes")
+                    print(f"[WS] Streaming TTS for: {full_response[:50]}...")
+                    async for chunk in processor.text_to_speech_bytes(full_response):
+                        await ws.send_bytes(chunk)
+                    print("[WS] TTS streaming complete")
                 except Exception as e:
-                    print(f"[WS] TTS Error: {e}")
+                    print(f"[WS] TTS Streaming Error: {e}")
                 
                 # 5. Back to idle
                 await ws.send_text(json.dumps({"type": "status", "data": "idle"}))

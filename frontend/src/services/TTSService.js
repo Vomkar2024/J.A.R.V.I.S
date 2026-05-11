@@ -13,6 +13,8 @@ let analyser = null;
 let dataArray = null;
 
 const TTSService = {
+  audioQueue: [],
+  isProcessingQueue: false,
   /**
    * getAudioContext
    * Lazily initializes the AudioContext (must be done after user gesture).
@@ -76,48 +78,53 @@ const TTSService = {
 
   /**
    * playAudio
-   * Plays an audio blob (from backend TTS or WebSocket binary).
-   * Now uses AudioContext for superior binary handling.
+   * Queues an audio blob for sequential playback.
+   * Supports real-time chunked streaming.
    */
   async playAudio(audioBlob) {
-    console.log('[TTSService] playAudio request received. Blob size:', audioBlob.size);
+    if (!audioBlob || audioBlob.size === 0) return;
     
-    if (!audioBlob || audioBlob.size === 0) {
-      console.warn('[TTSService] Empty audio blob, skipping.');
+    // Add to queue
+    this.audioQueue.push(audioBlob);
+    
+    // Start processing if not already running
+    if (!this.isProcessingQueue) {
+      this.processQueue();
+    }
+  },
+
+  /**
+   * processQueue
+   * Internal method to play audio blobs in order.
+   */
+  async processQueue() {
+    if (this.audioQueue.length === 0) {
+      this.isProcessingQueue = false;
       return;
     }
 
+    this.isProcessingQueue = true;
+    const blob = this.audioQueue.shift();
+
     try {
-      this.stop();
-      
       const ctx = this.getAudioContext();
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      
-      console.log('[TTSService] Decoding audio data...');
+      const arrayBuffer = await blob.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      
-      console.log('[TTSService] Audio decoded successfully. Duration:', audioBuffer.duration.toFixed(2), 's');
       
       sourceNode = ctx.createBufferSource();
       sourceNode.buffer = audioBuffer;
-      
-      // Connect to analyser instead of destination directly
       sourceNode.connect(analyser);
       
-      return new Promise((resolve) => {
-        sourceNode.onended = () => {
-          console.log('[TTSService] Audio playback finished.');
-          sourceNode = null;
-          resolve();
-        };
-        
-        sourceNode.start(0);
-        console.log('[TTSService] Audio source started.');
-      });
+      sourceNode.onended = () => {
+        sourceNode = null;
+        this.processQueue();
+      };
+      
+      sourceNode.start(0);
     } catch (error) {
-      console.error('[TTSService] Playback failed:', error);
-      // Last resort fallback: try traditional Audio object if decoding fails
-      return this.playAudioFallback(audioBlob);
+      console.error('[TTSService] Queue playback failed:', error);
+      // If a chunk fails, try next one
+      this.processQueue();
     }
   },
 
@@ -157,6 +164,10 @@ const TTSService = {
    * Stops all currently playing audio across all engines.
    */
   stop() {
+    // 0. Clear Queue
+    this.audioQueue = [];
+    this.isProcessingQueue = false;
+
     // 1. Stop Web Speech API
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();

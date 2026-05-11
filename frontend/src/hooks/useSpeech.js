@@ -61,6 +61,7 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
   const isRestartingRef = useRef(false);
   const mountedRef = useRef(true);
   const isSpeakingRef = useRef(isSpeaking);
+  const fullRecognitionResetRef = useRef(null);
 
   useEffect(() => {
     isSpeakingRef.current = isSpeaking;
@@ -147,81 +148,6 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
   }, []);
 
   // ============================================================
-  // Full Reset — Nuclear Option for Persistent Failures
-  // ============================================================
-
-  const fullRecognitionReset = useCallback(() => {
-    console.log('[Neural] 🔥 Full recognition reset — too many errors');
-    
-    // Destroy current recognition instance
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.onend = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.stop();
-      } catch (e) { /* ignore */ }
-      recognitionRef.current = null;
-    }
-
-    // Clear error history
-    errorTimestampsRef.current = [];
-    restartDelayRef.current = NEURAL_CONFIG.RESTART_DELAY;
-    isRestartingRef.current = false;
-
-    // Create a fresh recognition instance
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    // Re-attach handlers (same logic as initial setup)
-    attachRecognitionHandlers(recognition);
-    recognitionRef.current = recognition;
-
-    // Start immediately
-    if (isListeningRef.current) {
-      try {
-        recognition.start();
-        lastActivityRef.current = Date.now();
-        console.log('[Neural] ✅ Fresh recognition instance started');
-      } catch (e) {
-        console.error('[Neural] 💥 Even fresh instance failed:', e);
-      }
-    }
-  }, [attachRecognitionHandlers]); // attachRecognitionHandlers defined below, linked via ref pattern
-
-  // ============================================================
-  // Watchdog Timer — Detect Silently-Dead Recognition
-  // ============================================================
-
-  const startWatchdog = useCallback(() => {
-    if (watchdogTimerRef.current) clearInterval(watchdogTimerRef.current);
-
-    watchdogTimerRef.current = setInterval(() => {
-      if (!isListeningRef.current || !mountedRef.current) return;
-
-      const timeSinceActivity = Date.now() - lastActivityRef.current;
-      
-      // If no activity in 2x the watchdog interval, recognition might be dead
-      if (timeSinceActivity > NEURAL_CONFIG.WATCHDOG_INTERVAL * 2) {
-        console.warn(`[Neural] 🐕 Watchdog: No activity for ${Math.round(timeSinceActivity / 1000)}s — poking recognition`);
-        restartRecognition('watchdog_timeout', true);
-      }
-    }, NEURAL_CONFIG.WATCHDOG_INTERVAL);
-  }, [restartRecognition]);
-
-  const stopWatchdog = useCallback(() => {
-    if (watchdogTimerRef.current) {
-      clearInterval(watchdogTimerRef.current);
-      watchdogTimerRef.current = null;
-    }
-  }, []);
-
-  // ============================================================
   // Recognition Event Handler Attachment
   // ============================================================
 
@@ -299,7 +225,7 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
 
       if (needsReset) {
         // Too many errors — full reset
-        fullRecognitionReset();
+        if (fullRecognitionResetRef.current) fullRecognitionResetRef.current();
       } else if (event.error === 'network') {
         // Network error — wait a bit longer before retry
         restartDelayRef.current = Math.max(restartDelayRef.current, NEURAL_CONFIG.ERROR_RESTART_DELAY);
@@ -317,7 +243,84 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
         restartRecognition(`error_${event.error}`);
       }
     };
-  }, [onTranscriptChange, onFinalTranscript, trackError, restartRecognition, fullRecognitionReset]);
+  }, [onTranscriptChange, onFinalTranscript, trackError, restartRecognition]);
+
+  // ============================================================
+  // Full Reset — Nuclear Option for Persistent Failures
+  // ============================================================
+
+  const fullRecognitionReset = useCallback(() => {
+    console.log('[Neural] 🔥 Full recognition reset — too many errors');
+    
+    // Destroy current recognition instance
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.stop();
+      } catch (e) { /* ignore */ }
+      recognitionRef.current = null;
+    }
+
+    // Clear error history
+    errorTimestampsRef.current = [];
+    restartDelayRef.current = NEURAL_CONFIG.RESTART_DELAY;
+    isRestartingRef.current = false;
+
+    // Create a fresh recognition instance
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    // Re-attach handlers (same logic as initial setup)
+    attachRecognitionHandlers(recognition);
+    recognitionRef.current = recognition;
+
+    // Start immediately
+    if (isListeningRef.current) {
+      try {
+        recognition.start();
+        lastActivityRef.current = Date.now();
+        console.log('[Neural] ✅ Fresh recognition instance started');
+      } catch (e) {
+        console.error('[Neural] 💥 Even fresh instance failed:', e);
+      }
+    }
+  }, [attachRecognitionHandlers]); 
+
+  fullRecognitionResetRef.current = fullRecognitionReset;
+ 
+  // ============================================================
+  // Watchdog Timer — Detect Silently-Dead Recognition
+  // ============================================================
+
+  const startWatchdog = useCallback(() => {
+    if (watchdogTimerRef.current) clearInterval(watchdogTimerRef.current);
+
+    watchdogTimerRef.current = setInterval(() => {
+      if (!isListeningRef.current || !mountedRef.current) return;
+
+      const timeSinceActivity = Date.now() - lastActivityRef.current;
+      
+      // If no activity in 2x the watchdog interval, recognition might be dead
+      if (timeSinceActivity > NEURAL_CONFIG.WATCHDOG_INTERVAL * 2) {
+        console.warn(`[Neural] 🐕 Watchdog: No activity for ${Math.round(timeSinceActivity / 1000)}s — poking recognition`);
+        restartRecognition('watchdog_timeout', true);
+      }
+    }, NEURAL_CONFIG.WATCHDOG_INTERVAL);
+  }, [restartRecognition]);
+
+  const stopWatchdog = useCallback(() => {
+    if (watchdogTimerRef.current) {
+      clearInterval(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+  }, []);
 
   // Initialize Permissions
   useEffect(() => {

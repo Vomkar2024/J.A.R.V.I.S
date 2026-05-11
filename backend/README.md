@@ -1,63 +1,64 @@
 # J.A.R.V.I.S — Backend Intelligence Layer
-**Jointly Advanced & Real-time Visionary Intelligence System — Processing Brain**
+**Jointly Advanced & Real-time Visionary Intelligence System — Neural Core**
 
-The backend is a high-performance Python application designed to act as the central nervous system for J.A.R.V.I.S. It handles high-concurrency WebSockets, manages AI personality prompts, and coordinates the STT-LLM-TTS pipeline.
-
----
-
-## ⚙️ Technical Deep-Dive
-
-### 1. Neural WebSocket Lifecycle (`main.py`)
-The backend uses a persistent `/ws` connection. Here is the message lifecycle:
-1. **Connection**: Client establishes a link. The backend logs the handshake and prepares a `JarvisProcessor` instance.
-2. **Text Inbound**: `{"type": "chat", "text": "..."}`
-3. **LLM Activation**: The processor initiates a streaming completion with Groq.
-4. **Token Pushing**: Each token is wrapped in a `{"type": "token", "data": "..."}` JSON frame and pushed immediately.
-5. **Response Finalization**: Once the LLM is done, `{"type": "response_end"}` is sent.
-6. **Voice Generation**: The processor converts the *entire* text response into binary MP3 chunks.
-7. **Binary Push**: The backend pushes raw bytes directly to the socket. The client recognizes these as audio blobs.
-
-### 2. The Processor Logic (`core/processor.py`)
-- **System Prompt**: JARVIS is injected with a specialized "System Identity" that defines its tone: witty, helpful, sophisticated, and slightly dry.
-- **Context Management**: It keeps a `deque(maxlen=10)` of recent messages. This ensures J.A.R.V.I.S remembers what you just said, enabling natural, multi-turn conversations.
-- **Edge TTS Integration**: We use an asynchronous stream to capture voice synthesis data without blocking the server.
+The backend is a high-performance FastAPI application serving as the central nervous system for J.A.R.V.I.S. It manages a sophisticated pipeline of STT, LLM, and TTS modules while handling long-term memory and environmental interactions.
 
 ---
 
-## 🛠️ Performance Optimizations
+## ⚙️ Technical Architecture
 
-- **Llama 3.1 8B Instant**: We specifically selected this model for its balance of high intelligence and extreme throughput.
-- **Asynchronous I/O**: The entire backend is built using `async/await`. This allows J.A.R.V.I.S to handle multiple simultaneous voice interactions without lag.
-- **No Disk I/O**: In the main conversation loop, no files are written to disk. Audio is generated in memory and streamed as bytes, saving 100-200ms of latency per exchange.
+### 1. The Neural Processor (`core/processor.py`)
+The `JarvisProcessor` class is the heart of the system. It orchestrates:
+- **Streaming LLM**: Uses Groq LPU™ for lightning-fast token generation.
+- **RAG Memory**: Integrated **ChromaDB** for persistent vector storage of past interactions.
+- **Vision Engine**: High-fidelity screen analysis using advanced computer vision models.
+- **Recursive Summarization**: Automatically condenses conversation history when token limits are approached.
 
----
+### 2. Predictive Telemetry System
+The backend utilizes `psutil` to monitor system vitals:
+- **Live Monitoring**: CPU and RAM usage are sampled every 5 seconds.
+- **Trend Analysis**: The system maintains a rolling window of metrics to identify sustained spikes.
+- **Proactive Intervention**: If a critical load is detected, J.A.R.V.I.S will inject a system alert into the chat stream to warn the user.
 
-## 📡 API Reference
-
-### Real-Time Link
-- **URL**: `ws://localhost:8000/ws`
-- **Incoming JSON**: `{ "type": "chat", "text": "string" }`
-- **Outgoing JSON**:
-  - `{ "type": "status", "data": "thinking|speaking|idle" }`
-  - `{ "type": "token", "data": "string" }`
-  - `{ "type": "response_end" }`
-  - `{ "type": "audio_start" }`
-- **Outgoing Binary**: Raw MP3 byte stream.
-
-### Fallback REST
-- **POST `/ask`**: Returns JSON `{ "response": "string" }`.
-- **POST `/tts`**: Returns an MP3 file stream.
-- **GET `/health`**: Returns `{ "status": "ok", "engine": "J.A.R.V.I.S Core v3" }`.
+### 3. Unified Tool Registry
+J.A.R.V.I.S can interact with the host system via a safe tool-calling interface:
+- **File Ops**: CRUD operations on the local filesystem.
+- **Terminal**: Execution of shell commands (PowerShell/CMD).
+- **Web**: Real-time searching and weather retrieval.
+- **Export**: Dynamic generation of PDF/Word documents for session logging.
 
 ---
 
-## 📂 Logic Map
+## 📡 WebSocket Protocol (`/ws`)
 
-- `main.py`: Entry point, WebSocket handlers, and server config.
-- `core/processor.py`: The "Brain" containing STT, LLM, and TTS methods.
-- `requirements.txt`: Minimal, optimized dependency list.
-- `test_tts.py`: A CLI tool for testing voice synthesis independently.
+### Message Types (Outbound)
+| Type | Data Description |
+| :--- | :--- |
+| `status` | Current AI state (`thinking`, `speaking`, `memory_access`, `tool_use`, `observing`) |
+| `token` | Individual text tokens from the LLM stream |
+| `telemetry` | JSON object containing `cpu`, `ram`, and `status` |
+| `audio_start` | Signal that binary audio frames are about to follow |
+| `response_end` | Final full text of the response for logging |
+
+### Message Types (Inbound)
+| Type | Description |
+| :--- | :--- |
+| `chat` | User input text |
+| `clear_history` | Wipe the local session memory |
+| `ping` | Keep-alive heartbeat |
+
+---
+
+## 📂 Internal Directory Map
+
+- `core/processor.py`: Orchestration logic for all AI modules.
+- `core/memory.py`: ChromaDB integration for RAG.
+- `core/vision.py`: Visual perception and screen capture logic.
+- `core/tool_registry.py`: Definition and execution logic for external tools.
+- `memory_db/`: Persistent storage for vector embeddings.
+- `temp/`: Scratch space for generating audio and document exports.
 
 ---
 
 *“I design my own systems, I believe in performance.”*
+
