@@ -1,0 +1,69 @@
+# ============================================================
+# J.A.R.V.I.S — Version Control Exclusions
+# ============================================================
+
+# Secrets — NEVER commit these.
+.env
+.env.local
+.env.*.local
+frontend/.env
+backend/.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+venv_jarvis/
+.venv/
+ENV/
+
+# Node / React
+node_modules/
+frontend/build/
+frontend/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime artefacts
+backend/temp/
+backend/memory_db/
+backend/scratch/
+scratch/
+*.log
+
+# IDE / OS
+.vscode/*
+!.vscode/settings.json.example
+.idea/
+.DS_Store
+Thumbs.db
+
+# Models / large binaries
+backend/model/
+voice_pack/checkpoints/
+*.bin
+*.onnx
+*.pt
+*.pth
+*.safetensors

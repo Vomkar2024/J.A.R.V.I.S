@@ -1,308 +1,399 @@
-import os
-import json
+"""
+J.A.R.V.I.S — FastAPI Application Entrypoint
+=============================================
+Wires together the WebSocket streaming endpoint, the legacy REST fallback
+endpoints, and the lifecycle hooks for the neural processor.
+
+Security posture
+----------------
+* CORS origins are read from ``ALLOWED_ORIGINS`` (no wildcards by default).
+* ``GROQ_API_KEY`` is validated at boot — the server refuses to start
+  without a real key.
+* Every WebSocket send is serialised via an :class:`asyncio.Lock` to
+  eliminate interleaving between telemetry frames and response tokens.
+* Inbound text is length-clamped to prevent prompt-flooding.
+"""
+
+from __future__ import annotations
+
 import asyncio
-import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+import json
+import logging
+import os
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Final
+
+from dotenv import find_dotenv, load_dotenv
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from core.processor import JarvisProcessor
-from dotenv import load_dotenv, find_dotenv
+from pydantic import BaseModel, Field
 
-# Optional dependency for telemetry
+from core.processor import JarvisProcessor
+from core.security import redact
+
 try:
     import psutil
-    HAS_PSUTIL = True
+    _HAS_PSUTIL = True
 except ImportError:
-    HAS_PSUTIL = False
+    _HAS_PSUTIL = False
+
+# --- Bootstrap ---------------------------------------------------------------
 
 load_dotenv(find_dotenv())
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-if not GROQ_API_KEY or GROQ_API_KEY.startswith("gsk_your_key"):
-    print("\n[CRITICAL ERROR] GROQ_API_KEY is missing or invalid in .env file.")
-    print("Please set your key to enable J.A.R.V.I.S Intelligence.\n")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("jarvis.main")
 
-app = FastAPI()
-processor = JarvisProcessor()
+_GROQ_API_KEY: Final[str | None] = os.getenv("GROQ_API_KEY")
+if not _GROQ_API_KEY or _GROQ_API_KEY.startswith("gsk_your_key"):
+    raise RuntimeError(
+        "GROQ_API_KEY is missing or set to the placeholder. "
+        "Populate .env (see .env.example) before starting the server."
+    )
 
-# Enable CORS
+_ALLOWED_ORIGINS: Final[list[str]] = [
+    o.strip() for o in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:3000"
+    ).split(",") if o.strip()
+]
+_MAX_INBOUND_CHARS: Final[int] = 4000
+_MAX_AUDIO_BYTES: Final[int] = 25 * 1024 * 1024  # 25 MiB
+
+# --- Lifespan ----------------------------------------------------------------
+
+processor: JarvisProcessor
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Construct the singleton processor on startup."""
+    global processor
+    processor = JarvisProcessor()
+    logger.info("Neural processor online.")
+    try:
+        yield
+    finally:
+        logger.info("Shutting down.")
+
+
+app = FastAPI(
+    title="J.A.R.V.I.S Neural Core",
+    version="3.2.0",
+    lifespan=_lifespan,
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
+
 class ChatRequest(BaseModel):
-    text: str
+    """Request body for `/ask` and `/translate` endpoints."""
+    text: str = Field(..., min_length=1, max_length=_MAX_INBOUND_CHARS)
+
 
 # ============================================================
-# WebSocket Endpoint — Real-Time Bidirectional Communication
+# WebSocket: real-time bidirectional streaming
 # ============================================================
+
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
+async def websocket_endpoint(ws: WebSocket) -> None:
     """
-    Real-time WebSocket endpoint for J.A.R.V.I.S.
-    
-    Protocol:
-    Client -> Server (JSON):
-        {"type": "chat", "text": "Hello J.A.R.V.I.S."}
-        {"type": "clear_history"}
-    
-    Server -> Client (JSON):
-        {"type": "status", "data": "thinking"}
-        {"type": "token", "data": "Hello"}
-        {"type": "response_end", "data": "full response text"}
-        {"type": "audio_start"}
-        {"type": "error", "data": "error message"}
-    
-    Server -> Client (Binary):
-        Raw MP3 audio bytes for TTS playback
+    Primary WebSocket endpoint.
+
+    Client → Server (JSON):
+        ``{"type": "chat", "text": "..."}``
+        ``{"type": "clear_history"}``
+        ``{"type": "ping", "timestamp": <num>}``
+
+    Server → Client (JSON):
+        ``status`` · ``token`` · ``response_end`` · ``audio_start`` ·
+        ``telemetry`` · ``pong`` · ``error``
+
+    Server → Client (Binary):
+        Raw MP3 frames for TTS playback.
     """
     await ws.accept()
-    async def telemetry_loop():
-        """Background task to send system telemetry and monitor trends."""
-        if not HAS_PSUTIL:
-            print("[WS] Telemetry disabled: psutil not installed")
-            return
+    ws_lock: asyncio.Lock = asyncio.Lock()
 
+    async def send_json(payload: dict) -> None:
+        """Serialised JSON write to avoid interleaving with binary frames."""
+        async with ws_lock:
+            await ws.send_text(json.dumps(payload))
+
+    async def send_bytes(payload: bytes) -> None:
+        """Serialised binary write (audio frames)."""
+        async with ws_lock:
+            await ws.send_bytes(payload)
+
+    async def telemetry_loop() -> None:
+        """Sample host CPU/RAM every 5s and emit a telemetry frame."""
+        if not _HAS_PSUTIL:
+            logger.info("Telemetry disabled: psutil not installed.")
+            return
+        cpu_history: list[float] = []
         try:
-            cpu_history = []
             while True:
                 cpu = psutil.cpu_percent()
                 ram = psutil.virtual_memory().percent
-                
-                # Trend analysis for predictive telemetry
                 cpu_history.append(cpu)
-                if len(cpu_history) > 6:  # 6 * 5s = 30s window
+                if len(cpu_history) > 6:
                     cpu_history.pop(0)
-                
                 avg_cpu = sum(cpu_history) / len(cpu_history)
-                is_critical = avg_cpu > 90 and len(cpu_history) == 6
-                
-                await ws.send_text(json.dumps({
+                critical = avg_cpu > 90 and len(cpu_history) == 6
+                status = ("critical" if critical
+                          else ("warning" if cpu > 80 else "nominal"))
+                await send_json({
                     "type": "telemetry",
-                    "data": {
-                        "cpu": cpu,
-                        "ram": ram,
-                        "status": "critical" if is_critical else ("warning" if cpu > 80 else "nominal")
-                    }
-                }))
-                
-                # Proactive warning if critical
-                if is_critical:
-                    warning_text = "Sir, I've noticed a sustained CPU spike over the last 30 seconds. Shall I investigate which background processes are causing this load?"
-                    await ws.send_text(json.dumps({"type": "token", "data": f"\n[SYSTEM ALERT]: {warning_text}\n"}))
-                    # Note: We could also trigger a TTS call here if we wanted him to speak proactively.
-                
+                    "data": {"cpu": cpu, "ram": ram, "status": status},
+                })
+                if critical:
+                    await send_json({
+                        "type": "token",
+                        "data": ("\n[SYSTEM ALERT]: Sustained CPU spike over "
+                                 "the last 30 seconds, sir.\n"),
+                    })
                 await asyncio.sleep(5)
-        except Exception as e:
-            print(f"[WS] Telemetry Error: {e}")
-
-    # Server-side keep-alive — sends WebSocket protocol-level pings
-    # to keep the connection alive through proxies and firewalls
-    async def keepalive_loop():
-        """Send protocol-level WebSocket pings to prevent proxy timeouts."""
-        try:
-            while True:
-                await asyncio.sleep(20)  # Every 20 seconds
-                try:
-                    await ws.send_text(json.dumps({"type": "pong", "timestamp": 0}))
-                except Exception:
-                    break
         except asyncio.CancelledError:
             pass
+        except Exception as exc:
+            logger.warning("Telemetry loop error: %s", redact(str(exc)))
 
-    # Start background tasks
+    async def keepalive_loop() -> None:
+        """Emit an idle pong every 20s to defeat proxy timeouts."""
+        try:
+            while True:
+                await asyncio.sleep(20)
+                await send_json({"type": "pong", "timestamp": 0})
+        except (asyncio.CancelledError, Exception):
+            pass
+
     telemetry_task = asyncio.create_task(telemetry_loop())
     keepalive_task = asyncio.create_task(keepalive_loop())
 
-    # Load initial memory from DB (Disabled for "no history" requirement)
-    # processor.load_initial_memory()
-    # if processor.conversation_history:
-    #     frontend_history = []
-    #     for msg in processor.conversation_history:
-    #         role = 'user' if msg['role'] == 'user' else 'assistant'
-    #         frontend_history.append({
-    #             "role": role,
-    #             "text": msg['content'],
-    #             "timestamp": datetime.datetime.now().isoformat()
-    #         })
-    #     await ws.send_text(json.dumps({"type": "history_load", "data": frontend_history}))
+    await send_json({"type": "status", "data": "idle"})
 
-    await ws.send_text(json.dumps({"type": "status", "data": "idle"}))
-    
     try:
         while True:
-            # Receive message from client
             data = await ws.receive_text()
-            message = json.loads(data)
-            msg_type = message.get("type", "")
-            
-            # Heartbeat — respond to ping immediately
-            if msg_type == "ping":
-                await ws.send_text(json.dumps({
-                    "type": "pong", 
-                    "timestamp": message.get("timestamp", 0)
-                }))
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                await send_json({"type": "error", "data": "Malformed JSON."})
                 continue
-            
+
+            msg_type = message.get("type", "")
+
+            if msg_type == "ping":
+                await send_json({
+                    "type": "pong",
+                    "timestamp": message.get("timestamp", 0),
+                })
+                continue
+
             if msg_type == "chat":
-                user_text = message.get("text", "").strip()
-                if not user_text or len(user_text) < 2:
+                user_text = (message.get("text") or "").strip()
+                if len(user_text) < 2:
                     continue
-                
-                print(f"[WS] User: {user_text}")
-                
-                # 1. Send "thinking" status
-                await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
-                
-                # 2. Stream LLM tokens
+                if len(user_text) > _MAX_INBOUND_CHARS:
+                    user_text = user_text[:_MAX_INBOUND_CHARS]
+
+                logger.info("User: %s", user_text[:120])
+                await send_json({"type": "status", "data": "thinking"})
+
                 full_response = ""
                 try:
                     for token in processor.stream_llm(user_text):
                         if token == "[VISION_ACTIVE]":
-                            await ws.send_text(json.dumps({"type": "status", "data": "observing"}))
+                            await send_json({"type": "status", "data": "observing"})
                             continue
                         if token == "[VISION_ENDED]":
-                            await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
+                            await send_json({"type": "status", "data": "thinking"})
                             continue
                         if token == "[MEMORY_ACTIVE]":
-                            # Signal that memory is being accessed
-                            await ws.send_text(json.dumps({"type": "status", "data": "memory_access"}))
+                            await send_json({"type": "status", "data": "memory_access"})
                             continue
-                        
                         if token.startswith("[TOOL_START:"):
-                            tool_name = token.replace("[TOOL_START:", "").replace("]", "")
-                            await ws.send_text(json.dumps({"type": "status", "data": "tool_use", "tool": tool_name}))
+                            await send_json({
+                                "type": "status",
+                                "data": "tool_use",
+                                "tool": token[len("[TOOL_START:"):-1],
+                            })
                             continue
-                        
                         if token.startswith("[TOOL_END:"):
-                            await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
+                            await send_json({"type": "status", "data": "thinking"})
                             continue
-                            
                         full_response += token
-                        await ws.send_text(json.dumps({"type": "token", "data": token}))
+                        await send_json({"type": "token", "data": token})
                         await asyncio.sleep(0)
-                except Exception as e:
-                    print(f"[WS] LLM Stream Error: {e}")
+                except Exception as exc:
+                    logger.error("LLM stream error: %s", redact(str(exc)))
                     full_response = "I'm sorry, sir. Neural link interrupted."
-                    await ws.send_text(json.dumps({"type": "token", "data": full_response}))
-                
-                # 3. Send response complete signal
-                await ws.send_text(json.dumps({"type": "response_end", "data": full_response}))
-                
-                # 4. Generate and stream TTS audio chunks
-                await ws.send_text(json.dumps({"type": "status", "data": "speaking"}))
-                await ws.send_text(json.dumps({"type": "audio_start"}))
-                
+                    await send_json({"type": "token", "data": full_response})
+
+                await send_json({"type": "response_end", "data": full_response})
+                await send_json({"type": "status", "data": "speaking"})
+                await send_json({"type": "audio_start"})
+
                 try:
-                    print(f"[WS] Streaming TTS for: {full_response[:50]}...")
                     async for chunk in processor.text_to_speech_bytes(full_response):
-                        await ws.send_bytes(chunk)
-                    print("[WS] TTS streaming complete")
-                except Exception as e:
-                    print(f"[WS] TTS Streaming Error: {e}")
-                
-                # 5. Back to idle
-                await ws.send_text(json.dumps({"type": "status", "data": "idle"}))
-                
+                        await send_bytes(chunk)
+                except Exception as exc:
+                    logger.error("TTS stream error: %s", redact(str(exc)))
+
+                await send_json({"type": "status", "data": "idle"})
+
             elif msg_type == "clear_history":
                 processor.clear_history()
-                await ws.send_text(json.dumps({"type": "status", "data": "history_cleared"}))
-                
+                await send_json({"type": "status", "data": "history_cleared"})
+
     except WebSocketDisconnect:
-        print("[WS] Client disconnected")
-    except Exception as e:
-        print(f"[WS] Unexpected error: {e}")
+        logger.info("Client disconnected.")
+    except Exception as exc:
+        logger.error("WebSocket unexpected error: %s", redact(str(exc)))
     finally:
         telemetry_task.cancel()
         keepalive_task.cancel()
-        print("[WS] Connection cleanup complete")
+        for task in (telemetry_task, keepalive_task):
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        logger.info("Connection cleanup complete.")
+
 
 # ============================================================
-# REST Endpoints — Fallback / Direct API Access
+# REST endpoints — fallback / direct API access
 # ============================================================
+
 @app.post("/stt")
-async def speech_to_text(file: UploadFile = File(...), mode: str = "cloud"):
-    """Transcribes audio using Groq Whisper (cloud) or Vosk (local)."""
+async def speech_to_text(
+    file: UploadFile = File(...),
+    mode: str = "cloud",
+) -> dict:
+    """
+    Transcribe an uploaded audio clip.
+
+    @param file  Multipart audio upload (wav/mp3/m4a/webm/ogg/flac).
+    @param mode  ``"cloud"`` (Groq Whisper) or ``"local"`` (Vosk).
+    @return      ``{"text": "...", "mode": "..."}``.
+    """
+    if mode not in {"cloud", "local"}:
+        raise HTTPException(400, "mode must be 'cloud' or 'local'")
     try:
         content = await file.read()
+        if len(content) > _MAX_AUDIO_BYTES:
+            raise HTTPException(413, "audio payload too large")
         if mode == "local":
             text = await processor.speech_to_text_local(content)
         else:
-            ext = file.filename.split(".")[-1]
+            ext = (file.filename or "").rsplit(".", 1)[-1] if file.filename else "wav"
             text = await processor.speech_to_text(content, ext)
         return {"text": text, "mode": mode}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("STT error: %s", redact(str(exc)))
+        raise HTTPException(500, "STT failed")
+
 
 @app.post("/ask")
-async def ask_llm(request: ChatRequest):
-    """Gets response from Groq LLM."""
+async def ask_llm(request: ChatRequest) -> dict:
+    """Non-streaming LLM call."""
     try:
-        response = await processor.ask_llm(request.text)
-        return {"response": response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"response": await processor.ask_llm(request.text)}
+    except Exception as exc:
+        logger.error("Ask error: %s", redact(str(exc)))
+        raise HTTPException(500, "ask failed")
+
 
 @app.post("/translate")
-async def translate_text(request: ChatRequest):
-    """Translates text using Groq LLM (High Accuracy)."""
+async def translate_text(request: ChatRequest) -> dict:
+    """High-accuracy Hinglish / Hindi → English translation."""
     try:
-        translation = await processor.translate_text(request.text)
-        return {"translation": translation}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"translation": await processor.translate_text(request.text)}
+    except Exception as exc:
+        logger.error("Translate error: %s", redact(str(exc)))
+        raise HTTPException(500, "translation failed")
+
 
 @app.post("/tts")
-async def text_to_speech(request: ChatRequest, background_tasks: BackgroundTasks):
-    """Converts text to speech using Edge TTS."""
+async def text_to_speech(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Synthesise text to MP3, returned as a downloadable file."""
     try:
         audio_path = await processor.text_to_speech(request.text)
-        # PROACTIVE REPAIR: Cleanup temp file after response
-        if audio_path and os.path.exists(audio_path):
-            background_tasks.add_task(os.remove, audio_path)
-        return FileResponse(audio_path, media_type="audio/mpeg", filename="response.mp3")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        if not audio_path or not os.path.exists(audio_path):
+            raise HTTPException(500, "TTS generated no audio")
+        background_tasks.add_task(os.remove, audio_path)
+        return FileResponse(
+            audio_path, media_type="audio/mpeg", filename="response.mp3"
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("TTS error: %s", redact(str(exc)))
+        raise HTTPException(500, "TTS failed")
+
 
 @app.post("/process-audio")
-async def process_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    """Full cycle: Audio -> Text -> LLM -> Audio."""
+async def process_audio(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    """End-to-end audio → audio cycle."""
     try:
         content = await file.read()
-        user_text, ai_response, audio_path = await processor.process_full_cycle(content)
-        
+        if len(content) > _MAX_AUDIO_BYTES:
+            raise HTTPException(413, "audio payload too large")
+        user_text, ai_response, audio_path = \
+            await processor.process_full_cycle(content)
         if not user_text:
             return {"error": "No speech detected"}
-        
-        # PROACTIVE REPAIR: Cleanup temp file after response
         if audio_path and os.path.exists(audio_path):
             background_tasks.add_task(os.remove, audio_path)
-            
         return FileResponse(
-            audio_path, 
-            media_type="audio/mpeg", 
+            audio_path,
+            media_type="audio/mpeg",
             filename="response.mp3",
             headers={
-                "X-User-Text": user_text.encode("utf-8").decode("latin-1"),
-                "X-AI-Response": ai_response.encode("utf-8").decode("latin-1")
-            }
+                "X-User-Text": user_text.encode("utf-8").decode("latin-1", "replace"),
+                "X-AI-Response": ai_response.encode("utf-8").decode("latin-1", "replace"),
+            },
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Process-audio error: %s", redact(str(exc)))
+        raise HTTPException(500, "processing failed")
+
 
 @app.get("/health")
-async def health():
-    return {"status": "ok", "engine": "J.A.R.V.I.S Core v3 — Real-Time"}
+async def health() -> dict:
+    """Cheap liveness probe."""
+    return {"status": "ok", "engine": "J.A.R.V.I.S Core v3.2 — Real-Time"}
+
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("BACKEND_PORT", 8000))
-    print(f"\n>> J.A.R.V.I.S Neural Engine starting on port {port}...")
-    print(f"   WebSocket: ws://localhost:{port}/ws")
-    print(f"   REST API:  http://localhost:{port}\n")
+    logger.info("J.A.R.V.I.S Neural Engine starting on port %d", port)
     uvicorn.run(app, host="0.0.0.0", port=port)
