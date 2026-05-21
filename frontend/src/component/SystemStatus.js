@@ -40,13 +40,12 @@ const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permis
     }
   };
 
-  // Logic to "connect these 2 during that splash screen"
-  // NEURAL_AI and WS_LINK will show as ONLINE/STABLE while showHero is active
-  const neuralAiStatus = (isBackendConnected || showHero) ? 'online' : 'error';
-  const neuralAiValue = (isBackendConnected || showHero) ? (isBackendConnected ? getPipelineDisplay() : 'SYNCING...') : 'DISCONNECTED';
+  // WS_LINK should reflect the actual backend connection state
+  const neuralAiStatus = isBackendConnected ? 'online' : 'error';
+  const neuralAiValue = isBackendConnected ? getPipelineDisplay() : 'DISCONNECTED';
   
-  const wsLinkStatus = (isBackendConnected || showHero) ? 'online' : 'error';
-  const wsLinkValue = (isBackendConnected || showHero) ? 'STABLE' : 'LINK_LOST';
+  const wsLinkStatus = isBackendConnected ? 'online' : 'error';
+  const wsLinkValue = isBackendConnected ? 'STABLE' : 'LINK_LOST';
 
   return (
     <div className={`system-status-container ${isRetracted ? 'retracted' : 'expanded'} ${!isVisible ? 'hidden' : 'visible'}`}>

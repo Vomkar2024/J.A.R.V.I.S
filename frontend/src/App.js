@@ -62,7 +62,8 @@ function App() {
     conversationHistory,
     telemetry,
     sendMessage,
-    clearHistory
+    clearHistory,
+    forceReconnect
   } = useBrain();
 
   // --- Speech Hook ---
@@ -120,6 +121,7 @@ function App() {
       
       const success = await startSpeech();
       if (success) {
+        forceReconnect();
         setAlert({ message: ALERTS.LINK_ESTABLISHED, isVisible: true });
         
         // CINEMATIC SEQUENCE: Expand HUD and trigger greeting

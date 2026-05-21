@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import TTSService from '../services/TTSService';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const WS_URL = API_URL.replace('http', 'ws') + '/ws';
+const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+const WS_URL = `${API_URL.replace(/^http/, 'ws')}/ws`;
 
 // ============================================================
 // Connection Constants — Tuned for Maximum Resilience
@@ -330,7 +330,7 @@ export const useBrain = () => {
         console.warn('[WS] ⚠️ Connection error');
         connectingRef.current = false;
         setIsBackendConnected(false);
-        // onclose will fire after onerror, which will trigger reconnect
+        // onclose will fire after onerror, which will trigger reconnect if needed
       };
 
       wsRef.current = ws;
@@ -560,6 +560,17 @@ export const useBrain = () => {
     setStreamingText('');
   }, []);
 
+  const forceReconnect = useCallback(() => {
+    reconnectAttemptRef.current = 0;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+    }
+  }, [connectWebSocket]);
+
   // When we get a final response, add it to conversation history
   useEffect(() => {
     if (aiResponse) {
@@ -580,6 +591,7 @@ export const useBrain = () => {
     systemLogs,
     telemetry,
     sendMessage,
-    clearHistory
+    clearHistory,
+    forceReconnect
   };
 };
