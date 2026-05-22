@@ -6,7 +6,7 @@ import './css/SystemStatus.css';
  * A futuristic, HUD-style status bar that displays the real-time state 
  * of the J.A.R.V.I.S subsystems. Uses WebSocket connection status.
  */
-const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permissionGranted, showHero, isBackendConnected, pipelineState, activeTool, telemetry, forceExpand }) => {
+const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permissionGranted, showHero, isBackendConnected, pipelineState, activeTool, telemetry, forceExpand, isHighlighted }) => {
   const [isRetracted, setIsRetracted] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   
@@ -25,6 +25,13 @@ const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permis
       setIsRetracted(true);
     }
   }, [showHero, forceExpand]);
+
+  // Auto-expand HUD when highlighted (e.g., when CORE tab is active)
+  useEffect(() => {
+    if (isHighlighted) {
+      setIsRetracted(false);
+    }
+  }, [isHighlighted]);
 
   const toggleHUD = useCallback(() => setIsRetracted(prev => !prev), []);
 
@@ -48,7 +55,7 @@ const SystemStatus = ({ isListening, isThinking, isSpeaking, isSupported, permis
   const wsLinkValue = isBackendConnected ? 'STABLE' : 'LINK_LOST';
 
   return (
-    <div className={`system-status-container ${isRetracted ? 'retracted' : 'expanded'} ${!isVisible ? 'hidden' : 'visible'}`}>
+    <div className={`system-status-container ${isRetracted ? 'retracted' : 'expanded'} ${!isVisible ? 'hidden' : 'visible'} ${isHighlighted ? 'tab-highlight-active-core' : ''}`}>
       
       {/* Unified Scanline */}
       <div className="unified-scanning-glow"></div>

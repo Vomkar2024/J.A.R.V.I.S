@@ -1,6 +1,6 @@
 # J.A.R.V.I.S Agent Guide
 
-**Jointly Advanced & Real-time Visionary Intelligence System v3.1**
+**Jointly Advanced & Real-time Visionary Intelligence System v4.0.0**
 
 A high-fidelity voice-first AI assistant with real-time streaming, RAG memory, and integrated tool suite.
 

@@ -355,3 +355,25 @@
     max-height: 45vh;
   }
 }
+
+/* --- Glowing Cyber Links --- */
+.terminal-link {
+  color: #38bdf8; /* cyber sky blue */
+  text-decoration: none;
+  font-weight: 600;
+  position: relative;
+  transition: all 0.2s ease;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+  border-bottom: 1px dashed rgba(56, 189, 248, 0.4);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.terminal-link:hover {
+  color: #22d3ee; /* vibrant bright cyan */
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.8);
+  border-bottom: 1px solid rgba(34, 211, 238, 0.8);
+  background: rgba(34, 211, 238, 0.1);
+  cursor: pointer;
+}
+

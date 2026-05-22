@@ -2,11 +2,13 @@ import os
 import json
 import asyncio
 import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+import io
 from pydantic import BaseModel
 from core.processor import JarvisProcessor
+from core.secure_storage import NexusSecureStorage
 from dotenv import load_dotenv, find_dotenv
 
 # Optional dependency for telemetry
@@ -25,11 +27,29 @@ if not GROQ_API_KEY or GROQ_API_KEY.startswith("gsk_your_key"):
 
 app = FastAPI()
 processor = JarvisProcessor()
+vault = NexusSecureStorage()
 
-# Enable CORS
+class PasswordRequest(BaseModel):
+    password: str
+
+class FileActionRequest(BaseModel):
+    password: str
+    uuid: str
+
+# Enable CORS with restricted origins (harden security)
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+env_origins = os.getenv("ALLOWED_ORIGINS")
+if env_origins:
+    allowed_origins.extend([origin.strip() for origin in env_origins.split(",") if origin.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -318,6 +338,113 @@ async def process_audio(background_tasks: BackgroundTasks, file: UploadFile = Fi
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# Nexus Vault High-Security Storage Endpoints
+# ============================================================
+@app.get("/api/nexus/status")
+async def get_nexus_status():
+    """Checks if the secure storage vault index has been initialized."""
+    try:
+        return {"initialized": vault.is_initialized()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check vault status: {str(e)}")
+
+@app.post("/api/nexus/initialize")
+async def initialize_nexus(request: PasswordRequest):
+    """Initializes the secure storage vault with a master password."""
+    try:
+        if vault.is_initialized():
+            raise HTTPException(status_code=400, detail="Vault is already initialized, sir.")
+        vault.initialize_vault(request.password)
+        return {"status": "initialized"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initialize vault: {str(e)}")
+
+@app.post("/api/nexus/unlock")
+async def unlock_nexus(request: PasswordRequest):
+    """Validates if the provided password can decrypt the vault registry."""
+    try:
+        unlocked = vault.unlock_vault(request.password)
+        if not unlocked:
+            raise HTTPException(status_code=401, detail="Authentication failed. Invalid master password, sir.")
+        return {"status": "unlocked"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Authentication error: {str(e)}")
+
+@app.post("/api/nexus/files")
+async def list_nexus_files(request: PasswordRequest):
+    """Lists metadata for all files in the secure vault."""
+    try:
+        files = vault.list_files(request.password)
+        return {"files": files}
+    except ValueError as ve:
+        raise HTTPException(status_code=401, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve secure index: {str(e)}")
+
+@app.post("/api/nexus/upload")
+async def upload_nexus_file(
+    file: UploadFile = File(...),
+    password: str = Form(...)
+):
+    """Encrypts and uploads a file into the secure vault."""
+    try:
+        file_bytes = await file.read()
+        file_uuid = vault.encrypt_and_store_file(
+            password=password,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            mime_type=file.content_type or "application/octet-stream"
+        )
+        return {"uuid": file_uuid, "filename": file.filename}
+    except ValueError as ve:
+        raise HTTPException(status_code=401, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Encryption failed: {str(e)}")
+
+@app.post("/api/nexus/download")
+async def download_nexus_file(request: FileActionRequest):
+    """Decrypts a secure file from the vault and streams it back to the client in-memory."""
+    try:
+        file_bytes, filename, mime_type = vault.decrypt_and_retrieve_file(
+            password=request.password,
+            file_uuid=request.uuid
+        )
+        
+        # We wrap the decrypted bytes in an in-memory stream (StreamingResponse)
+        # to ensure zero persistent plaintext is stored on disk
+        return StreamingResponse(
+            io.BytesIO(file_bytes),
+            media_type=mime_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
+    except ValueError as ve:
+        raise HTTPException(status_code=401, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Decryption failed: {str(e)}")
+
+@app.post("/api/nexus/delete")
+async def delete_nexus_file(request: FileActionRequest):
+    """Securely deletes a file from the vault registry and wipes it from disk."""
+    try:
+        vault.delete_file(password=request.password, file_uuid=request.uuid)
+        return {"status": "deleted"}
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
+    except ValueError as ve:
+        raise HTTPException(status_code=401, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 @app.get("/health")
 async def health():

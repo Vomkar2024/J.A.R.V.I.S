@@ -3,6 +3,34 @@ import './css/BrainTerminal.css';
 import { STATUS_LABELS } from '../constants';
 
 /**
+ * Utility to parse URLs and render them as clickable anchor tags.
+ */
+const renderMessageWithLinks = (text) => {
+  if (!text) return '';
+  // Match standard URLs (http/https) or www. links
+  const urlRegex = /(https?:\/\/[^\s\+]+|www\.[^\s\+]+)/g;
+  const parts = text.split(urlRegex);
+  
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      const href = part.startsWith('http') ? part : `https://${part}`;
+      return (
+        <a 
+          key={i} 
+          href={href} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="terminal-link"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
+/**
  * BrainTerminal Component
  * The advanced communication hub for J.A.R.V.I.S.
  * Displays real-time streaming AI responses and conversation history.
@@ -57,7 +85,7 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
               </span>
             </div>
             <p className={`message-text ${msg.role}`}>
-              {msg.text}
+              {renderMessageWithLinks(msg.text)}
             </p>
           </div>
         ))}
@@ -67,7 +95,7 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
           <div className="message-segment assistant streaming">
             <div className="segment-label">⟩ JARVIS_RESPONSE <span className="live-badge">LIVE</span></div>
             <p className="message-text assistant">
-              {streamingText}
+              {renderMessageWithLinks(streamingText)}
               <span className="cursor-blink">▊</span>
             </p>
           </div>

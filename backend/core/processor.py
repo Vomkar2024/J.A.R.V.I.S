@@ -207,42 +207,54 @@ class JarvisProcessor:
                     elif function_response == "CREATE_FILE_REQUESTED":
                         path = function_args.get("path")
                         content = function_args.get("content")
-                        try:
-                            # Ensure parent directories exist
-                            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-                            with open(path, "w", encoding="utf-8") as f:
-                                f.write(content)
-                            function_response = f"File created successfully at {path}."
-                        except Exception as e:
-                            function_response = f"Error creating file: {str(e)}"
+                        if not self._is_safe_path(path):
+                            function_response = "Error: Access denied. The path escapes the secure neural workspace, sir."
+                        else:
+                            try:
+                                # Ensure parent directories exist
+                                os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                                with open(path, "w", encoding="utf-8") as f:
+                                    f.write(content)
+                                function_response = f"File created successfully at {path}."
+                            except Exception as e:
+                                function_response = f"Error creating file: {str(e)}"
                     elif function_response == "SEARCH_FILES_REQUESTED":
                         query = function_args.get("query")
                         root = function_args.get("root_dir", ".")
-                        try:
-                            matches = glob.glob(os.path.join(root, "**", query), recursive=True)
-                            function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
-                        except Exception as e:
-                            function_response = f"Error searching files: {str(e)}"
+                        if not self._is_safe_path(root):
+                            function_response = "Error: Access denied. The search root escapes the secure neural workspace, sir."
+                        else:
+                            try:
+                                matches = glob.glob(os.path.join(root, "**", query), recursive=True)
+                                function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
+                            except Exception as e:
+                                function_response = f"Error searching files: {str(e)}"
                     elif function_response == "TERMINAL_EXECUTION_REQUESTED":
                         command = function_args.get("command")
                         print(f"[Processor] Executing Terminal: {command}")
-                        try:
-                            # Running in a subprocess and capturing output
-                            # Note: In a real J.A.R.V.I.S., you'd want more safety/confirmation
-                            result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
-                            function_response = f"Command Output: {result[:500]}..."
-                        except subprocess.CalledProcessError as e:
-                            function_response = f"Command failed: {e.output[:500]}..."
-                        except Exception as e:
-                            function_response = f"Error: {str(e)}"
+                        if not self._is_safe_command(command):
+                            function_response = "Error: This command has been blocked by the Neural Safety Protocol for your protection, sir."
+                        else:
+                            try:
+                                # Running in a subprocess and capturing output
+                                # Note: In a real J.A.R.V.I.S., you'd want more safety/confirmation
+                                result = subprocess.check_output(command, shell=True, text=True, stderr=subprocess.STDOUT)
+                                function_response = f"Command Output: {result[:500]}..."
+                            except subprocess.CalledProcessError as e:
+                                function_response = f"Command failed: {e.output[:500]}..."
+                            except Exception as e:
+                                function_response = f"Error: {str(e)}"
                     elif function_response == "READ_FILE_REQUESTED":
                         path = function_args.get("path")
-                        try:
-                            with open(path, "r", encoding="utf-8") as f:
-                                content = f.read()
-                            function_response = f"File Content of {path}:\n{content[:2000]}"
-                        except Exception as e:
-                            function_response = f"Error reading file: {str(e)}"
+                        if not self._is_safe_path(path):
+                            function_response = "Error: Access denied. The path escapes the secure neural workspace, sir."
+                        else:
+                            try:
+                                with open(path, "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                function_response = f"File Content of {path}:\n{content[:2000]}"
+                            except Exception as e:
+                                function_response = f"Error reading file: {str(e)}"
                     elif function_response == "WEB_SEARCH_REQUESTED":
                         query = function_args.get("query")
                         print(f"[Processor] Searching the web for: {query}")
@@ -378,29 +390,38 @@ class JarvisProcessor:
                         if function_response == "CREATE_FILE_REQUESTED":
                             path = function_args.get("path")
                             content = function_args.get("content")
-                            try:
-                                os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-                                with open(path, "w", encoding="utf-8") as f:
-                                    f.write(content)
-                                function_response = f"File created successfully at {path}."
-                            except Exception as e:
-                                function_response = f"Error creating file: {str(e)}"
+                            if not self._is_safe_path(path):
+                                function_response = "Error: Access denied. The path escapes the secure neural workspace, sir."
+                            else:
+                                try:
+                                    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                                    with open(path, "w", encoding="utf-8") as f:
+                                        f.write(content)
+                                    function_response = f"File created successfully at {path}."
+                                except Exception as e:
+                                    function_response = f"Error creating file: {str(e)}"
                         elif function_response == "READ_FILE_REQUESTED":
                             path = function_args.get("path")
-                            try:
-                                with open(path, "r", encoding="utf-8") as f:
-                                    content = f.read()
-                                function_response = f"File Content of {path}:\n{content[:2000]}"
-                            except Exception as e:
-                                function_response = f"Error reading file: {str(e)}"
+                            if not self._is_safe_path(path):
+                                function_response = "Error: Access denied. The path escapes the secure neural workspace, sir."
+                            else:
+                                try:
+                                    with open(path, "r", encoding="utf-8") as f:
+                                        content = f.read()
+                                    function_response = f"File Content of {path}:\n{content[:2000]}"
+                                except Exception as e:
+                                    function_response = f"Error reading file: {str(e)}"
                         elif function_response == "SEARCH_FILES_REQUESTED":
                             query = function_args.get("query")
                             root = function_args.get("root_dir", ".")
-                            try:
-                                matches = glob.glob(os.path.join(root, "**", query), recursive=True)
-                                function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
-                            except Exception as e:
-                                function_response = f"Error searching files: {str(e)}"
+                            if not self._is_safe_path(root):
+                                function_response = "Error: Access denied. The search root escapes the secure neural workspace, sir."
+                            else:
+                                try:
+                                    matches = glob.glob(os.path.join(root, "**", query), recursive=True)
+                                    function_response = f"Found {len(matches)} files: {', '.join(matches[:10])}{'...' if len(matches) > 10 else ''}"
+                                except Exception as e:
+                                    function_response = f"Error searching files: {str(e)}"
                         elif function_response == "WEB_SEARCH_REQUESTED":
                             query = function_args.get("query")
                             print(f"[Processor] Searching the web for: {query}")
@@ -567,14 +588,54 @@ class JarvisProcessor:
             print(f"[Processor] Language detection failed: {e}")
         return None
 
+    def clean_text_for_tts(self, text: str) -> str:
+        """
+        Sanitize text for Text-to-Speech by removing markdown structures,
+        multiple spaces, and extra punctuation that trigger unnatural pauses.
+        """
+        import re
+        if not text:
+            return ""
+        # Remove markdown markers (*, _, `, #)
+        cleaned = re.sub(r'[\*\_`#]', '', text)
+        # Simplify spacing and consecutive newlines
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+        # Clear consecutive ellipsis or periods
+        cleaned = re.sub(r'\.\.+', '.', cleaned)
+        return cleaned.strip()
+
+    def _is_safe_path(self, path: str) -> bool:
+        """
+        Hardened Path Safety Check.
+        Ensures all operations stay strictly within the J.A.R.V.I.S workspace
+        to prevent directory traversal attacks.
+        """
+        try:
+            if not path:
+                return False
+            # Resolve target and workspace roots to absolute paths
+            target_path = os.path.abspath(path)
+            # Workspace root is two folders up from backend/core/processor.py
+            workspace_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            
+            # Normalize casing for case-insensitive filesystems (like Windows)
+            target_norm = os.path.normcase(target_path)
+            workspace_norm = os.path.normcase(workspace_root)
+            
+            # Target path must start with workspace_root (or be equal to it)
+            return target_norm.startswith(workspace_norm)
+        except Exception:
+            return False
+
     async def text_to_speech(self, text: str) -> str:
         """Converts text to audio using Edge TTS (Microsoft Ryan Neural)."""
         temp_filename = f"tts_{uuid.uuid4()}.mp3"
         temp_path = os.path.join(self.temp_dir, temp_filename)
         
         try:
-            # Using RyanNeural for that sophisticated British-adjacent tone
-            communicate = edge_tts.Communicate(text, self.voice)
+            cleaned_text = self.clean_text_for_tts(text)
+            # Using RyanNeural for that sophisticated British-adjacent tone with increased speed rate
+            communicate = edge_tts.Communicate(cleaned_text, self.voice, rate="+18%")
             await communicate.save(temp_path)
             return temp_path
         except Exception as e:
@@ -587,7 +648,8 @@ class JarvisProcessor:
         Yields chunks for real-time streaming.
         """
         try:
-            communicate = edge_tts.Communicate(text, self.voice)
+            cleaned_text = self.clean_text_for_tts(text)
+            communicate = edge_tts.Communicate(cleaned_text, self.voice, rate="+18%")
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     yield chunk["data"]
@@ -601,19 +663,23 @@ class JarvisProcessor:
         """
         blocked_keywords = [
             # Destructive
-            "rm ", "del ", "format ", "mkfs", "shred", "wipe",
+            "rm ", "del ", "format ", "mkfs", "shred", "wipe", "rmdir", "srm", "dd ",
             # System Altering
             "chmod", "chown", "passwd", "useradd", "groupadd", "systemctl stop", 
-            # Data Leaking / Sensitive
-            "curl -X POST", "wget --post", "env", "printenv", "secrets", ".env",
-            # Shell Escapes
-            "powershell -e", "base64", "python -c", "perl -e", "bash -i"
+            # Data Leaking / Sensitive / Shell escapes
+            "curl", "wget", "env", "printenv", "secrets", ".env", "powershell", 
+            "base64", "python -c", "perl -e", "bash", "cmd.exe", "netcat", "nc "
         ]
         
         cmd_lower = command.lower().strip()
         for kw in blocked_keywords:
             if kw in cmd_lower:
                 return False
+        
+        # Exact word safety check to block "set" (credential leakage) without blocking "settings" or "reset"
+        words = cmd_lower.split()
+        if "set" in words:
+            return False
         
         # Additional check: block attempts to write to sensitive system paths
         forbidden_paths = ["C:\\Windows", "/etc/", "/var/lib/", "/usr/bin/"]

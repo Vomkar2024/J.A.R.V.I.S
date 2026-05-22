@@ -59,7 +59,7 @@ const TTSService = {
 
       if (preferredVoice) utterance.voice = preferredVoice;
       utterance.pitch = 1.0;
-      utterance.rate = 1.05; 
+      utterance.rate = 1.20; 
       utterance.volume = 1.0;
       window.speechSynthesis.speak(utterance);
     };

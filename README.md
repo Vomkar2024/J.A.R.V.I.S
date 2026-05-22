@@ -1,8 +1,8 @@
-# J.A.R.V.I.S v3.1 — The Resilient Neural AI Ecosystem
+# J.A.R.V.I.S v4.0.0 — The Resilient Neural AI Ecosystem
 **Jointly Advanced & Real-time Visionary Intelligence System**
 
 ### 🌟 Introduction
-J.A.R.V.I.S is a high-fidelity, voice-first artificial intelligence interface designed to emulate the sophisticated assistants of sci-fi cinema. This v3.1 "Resilient Neural Link" upgrade hardens the system with local fallbacks, enhanced security, and improved memory recall logic. He is designed to be your ultimate digital companion, capable of managing your files, searching the web, and seeing the world through your screen.
+J.A.R.V.I.S is a high-fidelity, voice-first artificial intelligence interface designed to emulate the sophisticated assistants of sci-fi cinema. This v4.0.0 "Resilient Neural Link" upgrade hardens the system with local fallbacks, enhanced security, and improved memory recall logic. He is designed to be your ultimate digital companion, capable of managing your files, searching the web, and seeing the world through your screen.
 
 ---
 
@@ -37,7 +37,7 @@ Before you wake up J.A.R.V.I.S, make sure your computer has these "supplies" rea
 
 ## 🚀 The Neural Link Architecture
 
-Traditional AI applications suffer from high latency and lack of context. J.A.R.V.I.S v3.0 solves this with a **Persistent WebSocket Core**:
+Traditional AI applications suffer from high latency and lack of context. J.A.R.V.I.S v4.0.0 solves this with a **Persistent WebSocket Core**:
 
 1. **Parallel Streaming**: Tokens and binary audio chunks are streamed simultaneously. J.A.R.V.I.S begins speaking while he is still generating his response, reducing latency to near-zero.
 2. **Predictive Telemetry**: The system monitors CPU/RAM trends and can proactively warn the user of system instability.
@@ -112,7 +112,7 @@ npm run dev
 
 ---
 
-## 💎 J.A.R.V.I.S v3.1: Technical Masterpieces & Innovations
+## 💎 J.A.R.V.I.S v4.0.0: Technical Masterpieces & Innovations
 
 In our quest for perfection, we engineered several state-of-the-art solutions to ensure J.A.R.V.I.S is the most stable and fluid assistant ever created:
 

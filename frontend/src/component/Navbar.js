@@ -7,7 +7,7 @@ import TTSService from '../services/TTSService';
  * Restored to the version shown in the user's latest screenshot.
  * Includes HOME, CORE, NEXUS, SETTINGS links and a streamlined INITIALIZE button.
  */
-function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop }) {
+function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isListening, onInitialize, onStop, activeTab, setActiveTab }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -48,9 +48,19 @@ function Navbar({ blobSettings, setBlobSettings, onSave, onReset, showHero, isLi
       </div>
 
       <ul className="nav-links">
-        <li className="nav-item"><a href="#home" className="nav-link">HOME</a></li>
-        <li className="nav-item"><a href="#core" className="nav-link">CORE</a></li>
-        <li className="nav-item"><a href="#nexus" className="nav-link">NEXUS</a></li>
+        <li className={`nav-item ${activeTab === 'home' ? 'active' : ''}`}>
+          <a href="#home" className="nav-link" onClick={(e) => { e.preventDefault(); setActiveTab('home'); }}>HOME</a>
+        </li>
+        <li className={`nav-item ${activeTab === 'core' ? 'active' : ''}`}>
+          <a href="#core" className="nav-link" onClick={(e) => { e.preventDefault(); setActiveTab('core'); }}>CORE</a>
+        </li>
+        <li className={`nav-item ${activeTab === 'nexus' ? 'active' : ''}`}>
+          <a href="#nexus" className="nav-link" onClick={(e) => { e.preventDefault(); setActiveTab('nexus'); }}>NEXUS</a>
+          <div className="nexus-info">
+            <span className="nexus-title">NEXUS_SECURE_CORE</span>
+            <p className="nexus-desc">Zero-knowledge storage system encrypted with AES-256-GCM. Protect files, logs, and neural credentials with a master key.</p>
+          </div>
+        </li>
         <li className="nav-item" style={{ position: 'relative' }}>
           <a href="#settings" className="nav-link" onClick={handleToggleMenu}>SETTINGS</a>
           {isMenuOpen && (

@@ -5,7 +5,7 @@ import './css/SystemConsole.css';
  * SystemConsole Component
  * A technical log viewer that displays real-time events from the J.A.R.V.I.S engine.
  */
-const SystemConsole = ({ logs, isVisible }) => {
+const SystemConsole = ({ logs, isVisible, isHighlighted }) => {
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ const SystemConsole = ({ logs, isVisible }) => {
   if (!isVisible) return null;
 
   return (
-    <div className="system-console">
+    <div className={`system-console ${isHighlighted ? 'tab-highlight-active-nexus' : ''}`}>
       <div className="console-header">
         <span className="console-title">SYSTEM_DIAGNOSTICS</span>
         <div className="console-status">

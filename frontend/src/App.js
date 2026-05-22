@@ -14,6 +14,7 @@ import SystemAlert from './component/SystemAlert';
 import SystemStatus from './component/SystemStatus';
 import SystemConsole from './component/SystemConsole';
 import TranslationTerminal from './component/TranslationTerminal';
+import NexusVault from './component/NexusVault';
 
 // Constants
 import { HERO_TIMEOUT, ALERTS } from './constants';
@@ -51,6 +52,7 @@ function App() {
   const [transcript, setTranscript] = useState('');
   const [alert, setAlert] = useState({ message: '', isVisible: false });
   const [hudForceExpand, setHudForceExpand] = useState(false);
+  const [activeTab, setActiveTab] = useState('home');
 
   // --- Brain Hook (WebSocket) ---
   const {
@@ -222,12 +224,14 @@ function App() {
           onInitialize={handleInitialize} 
           onStop={handleStop}
           onClearHistory={clearHistory}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
         />
 
         <Hero showHero={showHero} />
 
         <div 
-          className={`blob-wrapper ${showHero ? 'hidden' : ''} ${isDragging ? 'dragging' : ''}`} 
+          className={`blob-wrapper ${showHero || activeTab === 'nexus' ? 'hidden' : ''} ${isDragging ? 'dragging' : ''}`} 
           onMouseDown={handleMouseDown} 
           style={{ 
             left: `${blobSettings.position.x}%`, 
@@ -264,6 +268,7 @@ function App() {
           activeTool={activeTool}
           telemetry={telemetry}
           forceExpand={hudForceExpand}
+          isHighlighted={activeTab === 'core'}
         />
         
         <BrainTerminal 
@@ -279,13 +284,17 @@ function App() {
 
         <SystemConsole 
           logs={systemLogs} 
-          isVisible={!showHero && systemLogs.length > 0} 
+          isVisible={!showHero && systemLogs.length > 0 && activeTab !== 'nexus'} 
+          isHighlighted={activeTab === 'nexus'}
         />
 
         <TranslationTerminal 
           translationData={translationData} 
-          isVisible={!!translationData && !showHero} 
+          isVisible={!!translationData && !showHero && activeTab !== 'nexus'} 
+          isHighlighted={activeTab === 'nexus'}
         />
+
+        {!showHero && activeTab === 'nexus' && <NexusVault />}
 
         <NeuralEngineStatus isProcessing={isThinking || isSpeaking} />
 
