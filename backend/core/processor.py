@@ -82,7 +82,7 @@ class JarvisProcessor:
         # Automatic context condensing
         # If history exceeds 12 messages, condense the first 6 into a summary
         if len(self.conversation_history) > 12:
-            print("[Processor] 🧠 Condensing neural history to save tokens...")
+            print("[Processor] Condensing neural history to save tokens...")
             to_condense = self.conversation_history[:6]
             self.conversation_history = self.conversation_history[6:]
             

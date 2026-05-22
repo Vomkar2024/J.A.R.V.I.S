@@ -6,7 +6,7 @@
     "sync-env": "powershell -Command \"cp .env frontend/.env; cp .env backend/.env\"",
     "start": "npm run sync-env && set NODE_OPTIONS=--no-deprecation && npm start --prefix frontend",
     "dev": "npm run sync-env && npx -y concurrently -n BACKEND,FRONTEND -c cyan,magenta \"npm run backend\" \"npm start --prefix frontend\"",
-    "backend": "npm run sync-env && cd backend && venv_jarvis\\Scripts\\python.exe main.py",
+    "backend": "npm run sync-env && cd backend && .venv\\Scripts\\python.exe main.py",
     "build": "npm run sync-env && npm run build --prefix frontend",
     "test": "npm test --prefix frontend"
   }

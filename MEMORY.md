@@ -1,0 +1,1 @@
+- [AGENTS.md](AGENTS.md) — AI agent guide to codebase architecture, modules, conventions, and common tasks
