@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './css/SplashScreen.css';
 import splashGif from '../img/slashscreen.gif';
 
-import { SPLASH_DURATION } from '../constants';
+import { SPLASH_DURATION, FADE_DURATION } from '../constants';
 
 const SplashScreen = () => {
   const [isFading, setIsFading] = useState(false);
@@ -18,7 +18,10 @@ const SplashScreen = () => {
   }, []);
 
   return (
-    <div className={`splash-overlay ${isFading ? 'fade-out' : ''}`}>
+    <div
+      className={`splash-overlay ${isFading ? 'fade-out' : ''}`}
+      style={{ transitionDuration: `${FADE_DURATION}ms` }}
+    >
       <div className="splash-content">
         <div className="jarvis-logo">
           {/* Main Animated GIF */}
