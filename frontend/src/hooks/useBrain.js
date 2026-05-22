@@ -1,7 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import TTSService from '../services/TTSService';
 
-const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+// Dynamic host resolution to support local network devices and alternate hostnames
+const getApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/+$/, '');
+  }
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname || 'localhost';
+  return `${protocol}//${hostname}:8000`;
+};
+const API_URL = getApiUrl();
 const WS_URL = `${API_URL.replace(/^http/, 'ws')}/ws`;
 
 // ============================================================
@@ -216,13 +225,10 @@ export const useBrain = () => {
           
           try {
             await TTSService.playAudio(audioBlob);
-            console.log('[WS] Audio playback finished');
+            console.log('[WS] Audio chunk queued for playback');
           } catch (err) {
             console.error('[WS] Audio playback error:', err);
           }
-          
-          setIsSpeaking(false);
-          setPipelineState('idle');
           return;
         }
 
@@ -578,6 +584,21 @@ export const useBrain = () => {
       setConversationHistory(prev => [...prev, aiMsg]);
     }
   }, [aiResponse]);
+
+  // Reactive audio playback monitor — unblocks mic only when J.A.R.V.I.S actually finishes speaking
+  useEffect(() => {
+    if (!isSpeaking) return;
+
+    const interval = setInterval(() => {
+      if (!TTSService.isPlaying() && TTSService.audioQueue.length === 0) {
+        setIsSpeaking(false);
+        setPipelineState('idle');
+        clearInterval(interval);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isSpeaking]);
 
   return {
     aiResponse,

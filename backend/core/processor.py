@@ -330,7 +330,7 @@ class JarvisProcessor:
                 # Send the memory data as a hidden signal (or we could just use it)
                 # yield f"[MEMORY_DATA:{relevant_context}]"
             
-            messages = [{"role": "system", "content": self.system_prompt + relevant_context}]
+            messages = [{"role": "system", "content": self.system_prompt + (relevant_context or "")}]
             messages.extend(self.conversation_history)
             
             # 1. Check if tool calling is needed (non-streaming first)
