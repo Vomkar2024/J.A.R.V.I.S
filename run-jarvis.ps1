@@ -22,7 +22,7 @@ function Start-TerminalProcess {
     Start-Process powershell -ArgumentList "-NoExit", "-Command", $Command -WindowStyle Normal
 }
 
-$backendCommand = "Set-Location '$root\\backend'; .\\venv\\Scripts\\python.exe main.py"
+$backendCommand = "Set-Location '$root\\backend'; .\\.venv\\Scripts\\python.exe main.py"
 Start-TerminalProcess -Name 'Backend (Neural AI WS server)' -Command $backendCommand
 
 if ($UseBuild) {
