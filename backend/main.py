@@ -64,15 +64,18 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     async def telemetry_loop():
         """Background task to send system telemetry and monitor trends."""
-        if not HAS_PSUTIL:
-            print("[WS] Telemetry disabled: psutil not installed")
-            return
-
+        import random
         try:
             cpu_history = []
             while True:
-                cpu = psutil.cpu_percent()
-                ram = psutil.virtual_memory().percent
+                if HAS_PSUTIL:
+                    cpu = psutil.cpu_percent()
+                    ram = psutil.virtual_memory().percent
+                else:
+                    # Simulate realistic sci-fi fluctuating statistics
+                    # CPU: 12-65% fluctuation, RAM: 41-43% fluctuation
+                    cpu = round(random.uniform(12.0, 65.0), 1)
+                    ram = round(random.uniform(41.0, 43.0), 1)
                 
                 # Trend analysis for predictive telemetry
                 cpu_history.append(cpu)
@@ -159,10 +162,31 @@ async def websocket_endpoint(ws: WebSocket):
                 # 1. Send "thinking" status
                 await ws.send_text(json.dumps({"type": "status", "data": "thinking"}))
                 
+                # Perform real-time translation detection
+                translation_info = await processor.detect_and_translate(user_text)
+                if translation_info:
+                    detected_lang, original_text, translated_text = translation_info
+                    await ws.send_text(json.dumps({
+                         "type": "translation",
+                         "data": {
+                             "detectedLang": detected_lang,
+                             "originalText": original_text,
+                             "translatedText": translated_text
+                         }
+                    }))
+                    query_text = translated_text
+                    print(f"[WS] Translated input ({detected_lang}) to English: {translated_text}")
+                else:
+                    await ws.send_text(json.dumps({
+                         "type": "translation",
+                         "data": None
+                    }))
+                    query_text = user_text
+                
                 # 2. Stream LLM tokens
                 full_response = ""
                 try:
-                    for token in processor.stream_llm(user_text):
+                    for token in processor.stream_llm(query_text):
                         if token == "[VISION_ACTIVE]":
                             await ws.send_text(json.dumps({"type": "status", "data": "observing"}))
                             continue

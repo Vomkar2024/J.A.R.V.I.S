@@ -47,20 +47,20 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
       </div>
 
       <div className="terminal-body" ref={scrollRef}>
-        {/* Dynamic Interaction Only (No Persistent History) */}
-        {conversationHistory.length > 0 && !streamingText && !isThinking && (
-          <div className={`message-segment ${conversationHistory[conversationHistory.length-1].role}`}>
+        {/* Full Scrollable Conversation History */}
+        {conversationHistory.map((msg, index) => (
+          <div key={index} className={`message-segment ${msg.role}`}>
             <div className="segment-label">
-              {conversationHistory[conversationHistory.length-1].role === 'user' ? '⟩ USER_INPUT' : '⟩ JARVIS_RESPONSE'}
+              {msg.role === 'user' ? '⟩ USER_INPUT' : '⟩ JARVIS_RESPONSE'}
               <span className="timestamp">
-                {new Date(conversationHistory[conversationHistory.length-1].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
+                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : ''}
               </span>
             </div>
-            <p className={`message-text ${conversationHistory[conversationHistory.length-1].role}`}>
-              {conversationHistory[conversationHistory.length-1].text}
+            <p className={`message-text ${msg.role}`}>
+              {msg.text}
             </p>
           </div>
-        )}
+        ))}
 
         {/* Streaming Text (real-time tokens) */}
         {streamingText && (

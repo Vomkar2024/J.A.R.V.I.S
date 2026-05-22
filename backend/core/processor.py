@@ -278,6 +278,13 @@ class JarvisProcessor:
             return response
         except Exception as e:
             print(f"LLM Error: {e}")
+            import groq
+            if isinstance(e, groq.AuthenticationError) or "invalid api key" in str(e).lower() or "401" in str(e):
+                return (
+                    "Apologies, sir. It appears my central Groq API key is invalid or has expired. "
+                    "Would you mind checking the GROQ_API_KEY entry in our central .env file? "
+                    "I cannot access my cognitive network without a valid uplink."
+                )
             return "I'm sorry, sir. I'm having trouble accessing my neural network at the moment."
 
     def load_initial_memory(self):
@@ -481,7 +488,15 @@ class JarvisProcessor:
             
         except Exception as e:
             print(f"LLM Stream Error: {e}")
-            error_msg = "I'm sorry, sir. Neural link interrupted."
+            import groq
+            if isinstance(e, groq.AuthenticationError) or "invalid api key" in str(e).lower() or "401" in str(e):
+                error_msg = (
+                    "Apologies, sir. It appears my central Groq API key is invalid or has expired. "
+                    "Would you mind checking the GROQ_API_KEY entry in our central .env file? "
+                    "I cannot access my cognitive network without a valid uplink."
+                )
+            else:
+                error_msg = "I'm sorry, sir. Neural link interrupted."
             self._add_to_history("assistant", error_msg)
             yield error_msg
 
@@ -507,6 +522,50 @@ class JarvisProcessor:
         except Exception as e:
             print(f"Translation Error: {e}")
             return text
+
+    async def detect_and_translate(self, text: str):
+        """
+        Detects if text is non-English (including Hindi/Hinglish) and translates it.
+        Returns a tuple: (detected_lang, original_text, translated_text) or None if English.
+        """
+        if not text or len(text.strip()) < 3:
+            return None
+        
+        trimmed = text.strip().lower()
+        if trimmed in ["hello", "hi", "jarvis", "hello jarvis", "hi jarvis"]:
+            return None
+
+        prompt = (
+            "Analyze this text from a user: "
+            f"\"{text}\"\n\n"
+            "Is it primarily in English (with minor greetings or names like 'Jarvis'), or is it in another language / Hinglish / Hindi?\n"
+            "If it is primarily English, reply with 'is_english': true.\n"
+            "Otherwise, identify the source language (e.g. 'Hinglish', 'Hindi', 'Spanish', etc.) and provide the English translation.\n"
+            "Use this exact JSON format for your reply:\n"
+            "{\n"
+            "  \"is_english\": true/false,\n"
+            "  \"detected_lang\": \"name of language\",\n"
+            "  \"translation\": \"English translation\"\n"
+            "}\n"
+            "Only return valid JSON. Do not include any other text."
+        )
+        try:
+            completion = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "You are a language detection and translation assistant. Output only JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0,
+                max_tokens=150,
+                response_format={"type": "json_object"}
+            )
+            res = json.loads(completion.choices[0].message.content.strip())
+            if not res.get("is_english", True) and res.get("translation"):
+                return res.get("detected_lang", "AUTO"), text, res.get("translation", "")
+        except Exception as e:
+            print(f"[Processor] Language detection failed: {e}")
+        return None
 
     async def text_to_speech(self, text: str) -> str:
         """Converts text to audio using Edge TTS (Microsoft Ryan Neural)."""

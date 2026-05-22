@@ -59,6 +59,7 @@ export const useBrain = () => {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [systemLogs, setSystemLogs] = useState([]);
   const [telemetry, setTelemetry] = useState({ cpu: 0, ram: 0, status: 'nominal' });
+  const [translationData, setTranslationData] = useState(null);
 
   // --- Refs ---
   const wsRef = useRef(null);
@@ -309,6 +310,13 @@ export const useBrain = () => {
             
             case 'telemetry':
               setTelemetry(message.data);
+              break;
+
+            case 'translation':
+              setTranslationData(message.data);
+              if (message.data) {
+                addLog(`Detected: ${message.data.detectedLang} | Translated to: ${message.data.translatedText}`, 'info');
+              }
               break;
 
             case 'error':
@@ -639,6 +647,7 @@ export const useBrain = () => {
     conversationHistory,
     systemLogs,
     telemetry,
+    translationData,
     sendMessage,
     clearHistory,
     forceReconnect

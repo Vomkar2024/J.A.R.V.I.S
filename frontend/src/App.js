@@ -12,6 +12,8 @@ import BrainTerminal from './component/BrainTerminal';
 import NeuralEngineStatus from './component/PuterStatus';
 import SystemAlert from './component/SystemAlert';
 import SystemStatus from './component/SystemStatus';
+import SystemConsole from './component/SystemConsole';
+import TranslationTerminal from './component/TranslationTerminal';
 
 // Constants
 import { HERO_TIMEOUT, ALERTS } from './constants';
@@ -60,7 +62,9 @@ function App() {
     pipelineState,
     activeTool,
     conversationHistory,
+    systemLogs,
     telemetry,
+    translationData,
     sendMessage,
     clearHistory,
     forceReconnect
@@ -271,6 +275,16 @@ function App() {
           pipelineState={pipelineState}
           activeTool={activeTool}
           onSendMessage={sendMessage}
+        />
+
+        <SystemConsole 
+          logs={systemLogs} 
+          isVisible={!showHero && systemLogs.length > 0} 
+        />
+
+        <TranslationTerminal 
+          translationData={translationData} 
+          isVisible={!!translationData && !showHero} 
         />
 
         <NeuralEngineStatus isProcessing={isThinking || isSpeaking} />
