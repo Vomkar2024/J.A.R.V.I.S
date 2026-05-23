@@ -1,0 +1,9 @@
+# J.A.R.V.I.S Central Gitignore
+
+# Environment files
+.env
+backend/.env
+frontend/.env
+
+# Local logs or environment backups
+*.bak
