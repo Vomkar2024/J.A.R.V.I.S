@@ -14,7 +14,6 @@ import base64
 import logging
 import os
 from io import BytesIO
-from typing import Optional
 
 from PIL import Image
 
@@ -53,7 +52,7 @@ class JarvisVision:
             client = Groq(api_key=api_key)
         self.client = client
 
-    def capture_screen(self) -> Optional[str]:
+    def capture_screen(self) -> str | None:
         """
         Capture the primary monitor and return a base64-encoded JPEG.
 

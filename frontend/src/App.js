@@ -161,7 +161,7 @@ function App() {
     } catch (error) {
       console.error('System Crash during initialization:', error);
     }
-  }, [startSpeech, sendMessage]);
+  }, [startSpeech, sendMessage, forceReconnect]);
 
   const handleStop = useCallback(() => {
     stopSpeech();

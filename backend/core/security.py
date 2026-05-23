@@ -3,16 +3,18 @@ core.security
 =============
 Defensive utilities shared across the J.A.R.V.I.S neural core.
 
-This module centralises every primitive that touches an untrusted boundary
-— shell invocation, filesystem traversal, and outbound-error sanitisation
-— so that the rest of the codebase can call into a single, audited surface.
+This module centralises the primitives that touch an untrusted boundary
+— allow-list validation, filesystem traversal, and outbound-error
+sanitisation — so the rest of the codebase calls into a single, audited
+surface. Subprocess execution itself lives in :mod:`core.sandbox`, which
+selects between Docker / Windows Job Object / hardened-subprocess at
+runtime and re-uses the validators here.
 
 Public API
 ----------
-- ``is_command_allowed(command)`` : allow-list filter for shell execution.
-- ``run_safe_command(command, ...)`` : shell-less subprocess wrapper.
-- ``resolve_within_sandbox(path)`` : path-traversal guard.
-- ``redact(text)``                  : strips secrets from log/output strings.
+- ``is_command_allowed(command)``    — allow-list filter for shell execution.
+- ``resolve_within_sandbox(path)``   — path-traversal guard.
+- ``redact(text)``                   — strips secrets from log/output strings.
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import subprocess
 from pathlib import Path
 from typing import Final
 
@@ -85,53 +86,6 @@ def is_command_allowed(command: str) -> tuple[bool, str]:
         return False, f"binary '{binary}' is not on the allow-list"
 
     return True, "ok"
-
-
-def run_safe_command(
-    command: str,
-    timeout: float = 10.0,
-    max_output: int = 2000,
-) -> str:
-    """
-    Execute an allow-listed command without invoking a shell.
-
-    @param command     Raw command line. Re-validated internally.
-    @param timeout     Hard wall-clock limit in seconds. Defaults to 10s.
-    @param max_output  Maximum bytes of stdout/stderr returned. Excess is
-                       truncated with an ellipsis marker.
-    @return            Human-readable command output (already redacted).
-                       On failure, returns a structured error string.
-    """
-    allowed, reason = is_command_allowed(command)
-    if not allowed:
-        return f"Blocked: {reason}."
-
-    tokens = shlex.split(command, posix=os.name != "nt")
-    try:
-        completed = subprocess.run(
-            tokens,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=str(SANDBOX_ROOT),
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return f"Timed out after {timeout}s."
-    except FileNotFoundError:
-        return "Executable not found on PATH."
-    except OSError as exc:
-        return f"OS error: {redact(str(exc))}"
-
-    stdout = (completed.stdout or "").strip()
-    stderr = (completed.stderr or "").strip()
-    payload = stdout or stderr or "(no output)"
-
-    if len(payload) > max_output:
-        payload = payload[:max_output] + "…[truncated]"
-
-    return redact(payload)
 
 
 def resolve_within_sandbox(user_path: str) -> Path:

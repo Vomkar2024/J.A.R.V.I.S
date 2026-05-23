@@ -13,7 +13,6 @@ import datetime
 import logging
 import os
 import uuid
-from typing import Optional
 
 import chromadb
 
@@ -27,7 +26,7 @@ _COLLECTION_NAME: str = "jarvis_conversations"
 class JarvisMemory:
     """Thin facade over a persistent ChromaDB collection."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         """
         @param db_path  Filesystem location for ChromaDB persistence. When
                         ``None``, defaults to ``<project>/backend/memory_db``.
@@ -102,7 +101,7 @@ class JarvisMemory:
             return ""
 
         lines = ["[NEURAL MEMORY RECALL]"]
-        for doc, meta in zip(docs, metas):
+        for doc, meta in zip(docs, metas, strict=False):
             ts = (meta or {}).get("timestamp", "Unknown")[:16].replace("T", " ")
             lines.append(f"--- Entry ({ts}) ---\n{doc}")
         lines.append("[END MEMORY RECALL]")

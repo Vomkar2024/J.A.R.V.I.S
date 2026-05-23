@@ -1,7 +1,7 @@
 ================================================================================
           J.A.R.V.I.S CONNECTION & NEURAL LINK RESILIENCE REPORT
 ================================================================================
-System Version:    3.2 (post-resilience hardening)
+System Version:    3.2 (sandbox + structured frames + NexusVault hardened)
 Date:              2026-05-23
 Target OS:         Windows 11 / Windows 10 (PowerShell)
 Framework Stack:   React 19 + Three.js (HUD) · FastAPI + Python 3.10+ (Core)
@@ -10,259 +10,394 @@ Repo Root:         c:\Users\shubh\Documents\Omkar\J.A.R.V.I.S
 
 TABLE OF CONTENTS
 -----------------
-1.  System Scan Summary
-2.  Original Resilience Fixes (A–D)
-3.  Code Verification & Build Status
-4.  Backend Python — Complete Function Inventory
-5.  Backend FastAPI — Endpoint Inventory
-6.  LLM Tool Registry — All Registered Tools
-7.  Shell Command Allow-List (Security Sandbox)
-8.  Frontend React — Component & Hook Inventory
-9.  Frontend Services — Method Inventory
-10. NPM / Shell / Verification Commands
-11. WebSocket Wire Protocol (Inbound + Outbound)
-12. Environment Variables (Boot-Time Configuration)
-13. Known Bugs, Open Errors, and Latent Risks
-14. Recommended Upgrades (Short-, Mid-, Long-Term)
-15. Operational Notes for Future Maintainers
+1.  Executive Summary
+2.  Original Resilience Fixes (A-D, v3.1)
+3.  v3.2 Hardening (E-H)
+4.  Code Verification & Build Status
+5.  Backend Python — Complete Function Inventory
+6.  Backend FastAPI — Endpoint Inventory (WS + REST + NexusVault)
+7.  LLM Tool Registry — All Registered Tools
+8.  Shell Command Allow-List
+9.  Sandbox Execution Backends
+10. NexusVault Cryptographic Profile
+11. Frontend React — Component & Hook Inventory
+12. Frontend Services — Method Inventory
+13. NPM / Shell / Verification Commands
+14. WebSocket Wire Protocol (v3.2 structured frames)
+15. Environment Variables
+16. Files Deleted in v3.2 Cleanup
+17. Known Bugs, Open Errors, Latent Risks
+18. Recommended Upgrades (Short / Mid / Long-Term)
+19. Operational Notes for Future Maintainers
 
 ================================================================================
-1. SYSTEM COMPREHENSIVE SCAN SUMMARY
+1. EXECUTIVE SUMMARY
 ================================================================================
-A deep static analysis + logical review was performed across:
-* Frontend custom hooks   — useBrain.js, useSpeech.js
-* Frontend audio service  — TTSService.js
-* Backend processor core  — processor.py
-* Backend network entry   — main.py
-* Backend security shim   — security.py
-* Backend memory layer    — memory.py
-* Backend tool registry   — tool_registry.py
-* Backend vision module   — vision.py
-* STT/TTS services        — stt_service.py, tts_service.py
+v3.2 represents a hardening + cleanup pass on top of the v3.1 resilience
+baseline. Three engineering tracks completed:
 
-Targeted engineering vulnerabilities (all patched in v3.1):
-  - Immediate audio-feedback ("self-talk") loop during STT capture.
-  - LAN / custom-domain inability to connect (hardcoded localhost).
-  - Crashes when accessed in insecure (non-localhost HTTP) contexts.
-  - String-concat TypeError in the LLM memory-injection layer.
+  TRACK A — EXECUTION ISOLATION
+    The terminal-execution tool no longer touches the host OS environment
+    directly. All shell commands are routed through `core.sandbox.run_sandboxed`,
+    which selects between three backends at runtime:
+      * Docker (`--network=none --read-only --cpus=0.5 --memory=256m
+        --pids-limit=64`)
+      * Windows Job Object (`KILL_ON_JOB_CLOSE` + CPU/memory/active-process
+        caps via pywin32)
+      * Hardened subprocess (stripped env, locked CWD, restricted PATH,
+        hard timeout)
 
-Additional v3.2 hardening (this revision):
-  - Resolved two unmerged git conflict regions in core/processor.py
-    that left the backend uncompilable on a clean checkout.
-  - Confirmed boot-time GROQ_API_KEY validation refuses placeholder keys.
-  - Confirmed CORS is env-driven (ALLOWED_ORIGINS) — no wildcard default.
+  TRACK B — WIRE-PROTOCOL REFACTOR
+    Control parameters are no longer embedded as `[TOOL_START:…]` sentinels
+    inside the streaming token text. Three new typed JSON frames carry the
+    same information out-of-band:
+      {"type":"tool_lifecycle", "state":"start"|"end", "name":"<UPPER>"}
+      {"type":"memory",         "state":"active"}
+      {"type":"vision",         "state":"start"|"end"}
+
+  TRACK C — PROJECT FOOTPRINT LOCKDOWN
+    * Recreated the broken uv `.venv` trampoline.
+    * Pinned dependencies: `backend/requirements.lock.txt` (110→113 entries).
+    * Wired the previously-orphaned `NexusSecureStorage` class to a FastAPI
+      router (`backend/nexus_routes.py`) — the React `NexusVault` panel can
+      now actually reach the backend.
+    * Deleted 13 useless artefacts from the working tree (see §16).
+    * `cryptography` added to requirements (was a hidden runtime dep).
 
 ================================================================================
-2. ORIGINAL RESILIENCE FIXES (A–D)
+2. ORIGINAL RESILIENCE FIXES (v3.1)
 ================================================================================
 [A] SELF-TALK FEEDBACK ELIMINATION (THE NEURAL LINK FIX)
-    Problem : Mic re-armed the instant first MP3 frame arrived; TTSService
-              .playAudio() returned immediately while the sound card kept
-              playing — J.A.R.V.I.S transcribed his own voice into an
-              infinite loop.
-    Solution: Reactive 100 ms polling monitor in useBrain.js that gates
-              speech recognition on
-                  TTSService.isPlaying() === false
-                  &&
-                  TTSService.audioQueue.length === 0
-    Files   : frontend\src\hooks\useBrain.js
+    Problem  : Mic re-armed the instant first MP3 frame arrived; TTSService
+               .playAudio() returned immediately while the sound card kept
+               playing — J.A.R.V.I.S transcribed his own voice into an
+               infinite loop.
+    Solution : Reactive 100 ms polling monitor in useBrain.js that gates
+               speech recognition on
+                   TTSService.isPlaying() === false
+                   AND
+                   TTSService.audioQueue.length === 0
+    Files    : frontend\src\hooks\useBrain.js
 
 [B] DYNAMIC WEBSOCKET URL RESOLUTION
-    Problem : Hardcoded `ws://localhost:8000` blocked LAN / mobile / custom
-              host testing.
-    Solution: Dynamic resolver honours REACT_APP_API_URL override, else
-              derives from window.location:
-                  `${protocol}//${hostname}:8000`
-              Reconnect: exponential backoff (500 ms → 10 s, ×1.5 decay,
-              ±30 % jitter) + tab-visibility & online-event triggers.
-    Files   : frontend\src\hooks\useBrain.js
+    Problem  : Hardcoded `ws://localhost:8000` blocked LAN / mobile / custom
+               host testing.
+    Solution : Dynamic resolver — honours REACT_APP_API_URL override, else
+               derives from window.location:
+                   `${protocol}//${hostname}:8000`
+               Reconnect: exponential backoff (500 ms → 10 s, ×1.5 decay,
+               ±30 % jitter) + tab-visibility & online-event triggers +
+               15 s ping / 5 s pong heartbeat.
+    Files    : frontend\src\hooks\useBrain.js
 
 [C] INSECURE-CONTEXT / getUserMedia GUARDS
-    Problem : `navigator.mediaDevices.getUserMedia` rejects outside HTTPS
-              or localhost — unhandled promise rejection crashed the HUD.
-    Solution: Pre-flight `window.isSecureContext` check + explicit
-              capability guard; failure now throws a friendly Error
-              instead of corrupting React render state.
-    Files   : frontend\src\hooks\useSpeech.js
+    Problem  : `navigator.mediaDevices.getUserMedia` rejects outside HTTPS
+               or localhost — unhandled promise rejection crashed the HUD.
+    Solution : Pre-flight `window.isSecureContext` check + explicit
+               capability guard; failure now throws a friendly Error
+               instead of corrupting React render state.
+    Files    : frontend\src\hooks\useSpeech.js
 
 [D] MEMORY CONCATENATION DEFENSIVE BOUNDARIES
-    Problem : `system_prompt + relevant_context` raised TypeError when
-              memory recall returned None, severing the WS connection.
-    Solution: Null-coalesce the recall payload — final form (post-conflict
-              resolution):
-                  content = self.system_prompt + (("\n" + recall) if recall else "")
-    Files   : backend\core\processor.py
+    Problem  : `system_prompt + relevant_context` raised TypeError when
+               memory recall returned None, severing the WS connection.
+    Solution : Null-coalesce the recall payload (post-conflict-resolution
+               final form):
+                   content = self.system_prompt + (("\n" + recall) if recall else "")
+    Files    : backend\core\processor.py
 
 ================================================================================
-3. CODE VERIFICATION & BUILD STATUS
+3. v3.2 HARDENING (E-H)
 ================================================================================
-Backend Python syntax (py_compile, system Python 3.13.9):
-  SUCCESS — all 8 modules compile cleanly with zero errors.
+[E] EXECUTION ENVIRONMENT ISOLATION
+    Problem  : `_h_execute_terminal` invoked `subprocess.run` directly with
+               only an allow-list + metachar filter. A buggy or compromised
+               allow-listed binary could fork uncontrolled descendants,
+               escape the parent's lifetime, or read the host environment
+               (including the Groq key).
+    Solution : New module `backend/core/sandbox.py`. Single entry point
+               `run_sandboxed(command, timeout, max_output)` with three
+               backends and runtime auto-selection. Allow-list and
+               metacharacter filter re-validated INSIDE the sandbox.
+    Files    : backend\core\sandbox.py (new, 320+ LOC)
+               backend\core\tool_registry.py (handler rewired)
+               backend\core\security.py (run_safe_command removed —
+                                         superseded by sandbox)
+               backend\requirements.txt (pywin32 added for Windows backend)
+
+[F] WIRE-PROTOCOL REFACTOR — STRUCTURED CONTROL FRAMES
+    Problem  : `stream_llm` emitted sentinel strings inside the token
+               stream (`[TOOL_START:NAME]`, `[MEMORY_ACTIVE]`,
+               `[VISION_ACTIVE]`). The HUD had to parse the text stream
+               for control transitions — fragile against user text
+               containing `[`, and inseparable from rendering.
+    Solution : `stream_llm` now yields typed dicts:
+                 {"kind":"token", "data":"..."}
+                 {"kind":"event", "type":"tool_lifecycle",
+                                 "state":"start"|"end", "name":"<NAME>"}
+                 {"kind":"event", "type":"memory", "state":"active"}
+                 {"kind":"event", "type":"vision", "state":"start"|"end"}
+               The `/ws` dispatcher maps each event 1:1 to a JSON frame.
+               The frontend `useBrain.js` switch handles each as its own
+               `case` (no string parsing inside `streamingText`).
+    Files    : backend\core\processor.py
+               backend\main.py
+               frontend\src\hooks\useBrain.js
+
+[G] NEXUSVAULT WIRING — Z-KNOWLEDGE STORAGE GOES LIVE
+    Problem  : `frontend/src/component/NexusVault.js` calls 6 endpoints
+               under `/api/nexus/*`. The `NexusSecureStorage` class
+               existed in `backend/core/secure_storage.py` but no FastAPI
+               router exposed it. Every action returned 404.
+    Solution : New `backend/nexus_routes.py` — APIRouter with the 6
+               endpoints, Pydantic body schemas (min password length,
+               UUID length cap), `Annotated[..., File()]` / `Form()`
+               idioms, RFC-5987 filename headers for downloads,
+               appropriate HTTP status mapping (401 wrong password,
+               404 missing UUID, 409 already initialised, 413 upload
+               too large). Router mounted in `main.py` via
+               `app.include_router(nexus_router)`.
+    Files    : backend\nexus_routes.py (new)
+               backend\main.py
+               backend\core\secure_storage.py (logger.warning instead of
+                                               print; narrowed except
+                                               Exception to (ValueError,
+                                               OSError))
+               backend\requirements.txt (cryptography added)
+
+[H] PROJECT FOOTPRINT LOCKDOWN
+    Problem  : The `backend/.venv/` was a broken uv trampoline ("uv
+               trampoline failed to spawn Python child process"). No
+               lockfile existed; dependency drift was inevitable. Source
+               tree contained Maven-Nexus files (POM, settings.xml with
+               cleartext `admin123` password, deploy.ps1) that had nothing
+               to do with the AI project — stale leftovers that fooled
+               grep for "nexus" into thinking it was the AI vault.
+    Solution : Recreated `.venv` via `py -3 -m venv backend\.venv`,
+               installed deps, captured exact pins to
+               `backend/requirements.lock.txt` (113 entries including
+               cryptography + pywin32).
+               Deleted: pom.xml, settings.xml, deploy.ps1, path.txt,
+               scratch/dump_memory.py, backend/scratch/purge_stark.py,
+               backend/scratch/test_security.py (broken — called methods
+               that no longer existed), all __pycache__/, .ruff_cache/,
+               .sandbox_run/, vault/, frontend/build/.
+
+================================================================================
+4. CODE VERIFICATION & BUILD STATUS
+================================================================================
+Backend ruff (F,E,W,B,UP,SIM,C4,RET,ARG; --ignore E501):
+  SUCCESS — all checks passed.
+
+Backend py_compile over 11 modules:
+  SUCCESS.
     backend\main.py
+    backend\nexus_routes.py
     backend\core\processor.py
     backend\core\memory.py
     backend\core\tool_registry.py
     backend\core\security.py
+    backend\core\sandbox.py
+    backend\core\secure_storage.py
     backend\core\vision.py
     backend\stt_service.py
     backend\tts_service.py
 
-Git merge-conflict markers in source tree: NONE.
-  (Documentation files contain `==========` banner separators only —
-   these are not git markers and are intentional.)
+Frontend eslint (--max-warnings 0):
+  SUCCESS — silent.
 
-Frontend production build: NOT VERIFIED THIS RUN.
-  Reason: `frontend\node_modules` is absent. Run `npm install` then
-  `npm run build --prefix frontend` to confirm.
+Frontend production build:
+  Compiled successfully. 205 kB gzipped JS / 8.7 kB CSS.
+
+Smoke tests:
+  sandbox.current_backend() == 'windows_jobobject'
+  run_sandboxed('whoami')                              -> shubham\shubh
+  run_sandboxed('curl http://evil.com')                -> Blocked (not on allow-list)
+  run_sandboxed('cat ../../../etc/passwd')             -> Blocked (not on restricted PATH)
+  NexusVault router routes registered                  -> 6/6
+  Vault status                                         -> {"initialized": false}
+
+Git merge-conflict markers in source tree: NONE.
 
 ================================================================================
-4. BACKEND PYTHON — COMPLETE FUNCTION INVENTORY
+5. BACKEND PYTHON — COMPLETE FUNCTION INVENTORY
 ================================================================================
 
 backend\main.py
 ---------------
-class ChatRequest(BaseModel)                       — request schema for /ask, /translate
+class ChatRequest(BaseModel)                       — request body for /ask, /translate
 async def _lifespan(_app)                          — FastAPI lifespan; builds singleton JarvisProcessor
-async def websocket_endpoint(ws)                   — primary /ws handler; spawns telemetry + keepalive loops
+async def websocket_endpoint(ws)                   — primary /ws handler
   inner async def send_json(payload)               — lock-serialised JSON writer
   inner async def send_bytes(payload)              — lock-serialised binary writer
   inner async def telemetry_loop()                 — 5 s CPU/RAM sampler + sustained-spike alerter
-  inner async def keepalive_loop()                 — 20 s idle-pong emitter (defeats proxy timeouts)
-async def speech_to_text(file)                     — REST fallback STT
+  inner async def keepalive_loop()                 — 20 s idle-pong emitter
+async def speech_to_text(file, mode)               — REST fallback STT
 async def ask_llm(request)                         — REST fallback non-streaming LLM
-async def translate_text(request)                  — REST Hinglish/Hindi → English translator
-async def text_to_speech(text)                     — REST TTS, returns MP3 stream
-async def process_audio(file)                      — full STT → LLM → TTS cycle via REST
+async def translate_text(request)                  — REST translator
+async def text_to_speech(request, background)      — REST TTS (returns MP3 file)
+async def process_audio(background, file)          — full STT→LLM→TTS via REST
 async def health()                                 — liveness probe
+
+backend\nexus_routes.py
+-----------------------
+class _PasswordOnly(BaseModel)                     — schema for init/files
+class _PasswordAndUuid(BaseModel)                  — schema for download/delete
+def status()                                       — GET /api/nexus/status
+def initialize(payload)                            — POST /api/nexus/initialize
+def list_files(payload)                            — POST /api/nexus/files (acts as unlock)
+async def upload(file, password)                   — POST /api/nexus/upload (multipart)
+def download(payload)                              — POST /api/nexus/download (StreamingResponse)
+def delete(payload)                                — POST /api/nexus/delete (shred + index update)
 
 backend\core\processor.py
 -------------------------
-class JarvisProcessor                              — central orchestrator (singleton)
-  def __init__()                                   — boot Groq client, ChromaDB memory, vision, history state
-  def _purge_temp_dir()                            — drop stale exports on startup
-  def _load_vosk_model()                           — lazy local STT model loader (None on failure)
-  def _add_to_history(role, content)               — append + auto-condense rolling window via _CONDENSE_FROM
-  def clear_history()                              — wipe in-memory history (ChromaDB untouched)
-  async def speech_to_text(audio_bytes, ext)       — Groq Whisper-Large-V3-Turbo with Vosk fallback
-  async def speech_to_text_local(audio_bytes)      — direct Vosk path
-  def _run_tool(tool_call)                         — dispatch through ToolContext to handler
-  def _build_messages(include_memory_for=None)     — assemble system+history payload for Groq
-  async def ask_llm(text)                          — non-stream LLM call (used by REST /ask)
-  def stream_llm(text)                             — generator that yields tokens + sentinel markers
-                                                     ([MEMORY_ACTIVE], [VISION_ACTIVE], [TOOL_START:NAME],
-                                                      [TOOL_END:NAME], [VISION_ENDED])
-  async def translate_text(text)                   — Groq translation pass
-  async def text_to_speech(text)                   — Edge TTS → on-disk MP3 path
-  async def text_to_speech_bytes(text)             — Edge TTS → AsyncIterator[bytes] for streaming
-  async def process_full_cycle(audio, ext)         — bundled STT→LLM→TTS pipeline
-  def _export_to_document(fmt="pdf")               — dispatch to docx/pdf exporter
+class JarvisProcessor                              — central orchestrator singleton
+  def __init__()                                   — boot Groq + ChromaDB + Vosk + tool context
+  def _purge_temp_dir()                            — clear stale exports on startup
+  def _load_vosk_model()                           — lazy local STT loader (None on failure)
+  def _add_to_history(role, content)               — append + auto-condense rolling window
+  def clear_history()                              — wipe in-memory history
+  async def speech_to_text(audio, ext)             — Groq Whisper with Vosk fallback
+  async def speech_to_text_local(audio)            — direct Vosk path
+  def _run_tool(tool_call)                         — dispatch through ToolContext
+  def _build_messages(include_memory_for=None)     — assemble system+history payload
+  async def ask_llm(text)                          — non-stream LLM (REST /ask)
+  def stream_llm(text) -> Iterator[dict]           — v3.2: yields typed events
+  async def translate_text(text)                   — Groq translation
+  async def text_to_speech(text)                   — Edge TTS → MP3 path
+  async def text_to_speech_bytes(text)             — Edge TTS → AsyncIterator[bytes]
+  async def process_full_cycle(audio, ext)         — bundled STT→LLM→TTS
+  def _export_to_document(fmt)                     — dispatch to docx/pdf
   def _export_docx(filename)                       — lazy-imports python-docx
   def _export_pdf(filename)                        — lazy-imports fpdf
 
 backend\core\memory.py
 ----------------------
-class JarvisMemory                                 — ChromaDB wrapper (RAG layer)
-  def __init__(db_path=None)                       — open or create persistent client
-  def _collection                                  — lazy collection handle (auto-rebuild if corrupt)
-  def collection                                   — back-compat alias for prior callers
-  def store_memory(user_text, ai_response)         — embed + persist a turn (timestamped metadata)
-  def query_memory(query, n_results=3)             — semantic recall; returns formatted string or empty
+class JarvisMemory                                 — ChromaDB wrapper
+  def __init__(db_path=None)                       — open/create persistent client
+  def _collection                                  — lazy collection handle (auto-rebuild on corruption)
+  def collection                                   — back-compat alias
+  def store_memory(user_text, ai_response)         — embed + persist with timestamped metadata
+  def query_memory(query, n_results=3)             — semantic recall → formatted string
   def clear_all_memories()                         — drop and recreate collection
 
 backend\core\security.py
 ------------------------
 def is_command_allowed(command)                    — allow-list filter; returns (bool, reason)
-def run_safe_command(command, ...)                 — shell-less subprocess wrapper (shlex+timeout)
-def resolve_within_sandbox(user_path)              — path-traversal guard (Path.resolve under SANDBOX_ROOT)
-def redact(text)                                   — strip Groq/OpenAI keys + generic api_key/token/secret
-Module-level constants:
-  SANDBOX_ROOT                                     — env JARVIS_SANDBOX_ROOT, defaults to repo root
-  _ALLOWED_BINARIES                                — frozenset of permitted command heads (see §7)
-  _SHELL_METACHARS                                 — denies `;`, `&`, `|`, backtick, `$`, `>`, `<`, `\n`, `&&`, `||`, `$( )`
-  _SECRET_PATTERNS                                 — redaction regexes
+def resolve_within_sandbox(user_path)              — path-traversal guard
+def redact(text)                                   — masks Groq/OpenAI/generic API key shapes
+
+backend\core\sandbox.py                            ★ NEW IN v3.2
+-----------------------
+def _resolve_backend()                             — pick docker / windows_jobobject / hardened
+def _ensure_run_dir()                              — dedicated CWD for sandboxed child
+def _scrubbed_env()                                — strip env, set restricted PATH
+def _run_hardened(tokens, timeout, max_output)     — stdlib-only backend
+def _run_windows_jobobject(tokens, timeout, max_output)  — pywin32 Job Object backend
+def _docker_available()                            — daemon-reachability probe
+def _run_docker(tokens, timeout, max_output)       — container backend
+def run_sandboxed(command, timeout, max_output)    — public entry point
+def current_backend()                              — diagnostic accessor
+
+backend\core\secure_storage.py
+------------------------------
+class NexusSecureStorage                           — zero-knowledge AES-256-GCM vault
+  def __init__(vault_dir=None)                     — open or create `vault/`
+  def _derive_key(password, salt)                  — PBKDF2-HMAC-SHA256, 100k iterations
+  def is_initialized()                             — registry index existence check
+  def initialize_vault(password)                   — create empty encrypted registry
+  def _load_index(password)                        — decrypt + parse registry
+  def _save_index(password, data)                  — encrypt + write registry
+  def unlock_vault(password)                       — verify password by decrypt attempt
+  def list_files(password)                         — return metadata list (sorted desc by date)
+  def encrypt_and_store_file(password, bytes, name, mime) — encrypt + persist + index
+  def decrypt_and_retrieve_file(password, uuid)    — returns (bytes, name, mime)
+  def delete_file(password, uuid)                  — secure shred + index removal
 
 backend\core\tool_registry.py
 -----------------------------
-class _MemoryLike(Protocol), _VisionLike, _ExporterLike   — duck-typed context interfaces
-class ToolContext                                          — handlers' service bag (memory/vision/exporter)
-class Tool                                                 — name + description + JSON Schema + handler
-  def to_groq_schema()                                     — emit Groq function-calling tool definition
-Handlers (all signature `(args: dict, ctx: ToolContext) -> str`):
-  _h_system_status      — CPU/RAM/disk snapshot via psutil
-  _h_time_and_date      — datetime.now()
-  _h_platform_info      — platform.uname()
-  _h_purge_memory       — delegates to ctx.memory.clear_all_memories()
-  _h_analyze_screen     — delegates to ctx.vision.analyze_screen(query)
-  _h_execute_terminal   — security.run_safe_command (allow-list enforced)
-  _h_create_file        — UTF-8 write inside SANDBOX_ROOT
-  _h_search_files       — glob inside sandbox
-  _h_read_file          — UTF-8 read, ≤ 1 MiB
-  _ddgs_text            — DuckDuckGo text search shim (lazy import)
-  _h_web_search         — wraps _ddgs_text
-  _h_weather            — DuckDuckGo "weather <loc>" pass-through
-  _h_export_conversation— delegates to ctx.exporter("pdf"|"docx")
-def execute_tool(name, arguments, ctx)             — public dispatch entry
+class _MemoryLike / _VisionLike / _ExporterLike    — duck-typed context interfaces
+class ToolContext                                  — handlers' service bag
+class Tool                                         — name + description + schema + handler
+  def to_groq_schema()                             — emit Groq function-calling schema
+Handlers (each `(args, ctx) -> str`):
+  _h_system_status, _h_time_and_date, _h_platform_info,
+  _h_purge_memory, _h_analyze_screen,
+  _h_execute_terminal           → routes through core.sandbox.run_sandboxed
+  _h_create_file, _h_search_files, _h_read_file,
+  _ddgs_text, _h_web_search, _h_weather,
+  _h_export_conversation
+def execute_tool(name, arguments, ctx)             — public dispatcher
 
 backend\core\vision.py
 ----------------------
 class JarvisVision
-  def __init__(client=None)                        — accept Groq client for vision call (lazy)
-  def capture_screen()                             — pyautogui screenshot → base64 PNG (or None)
-  def analyze_screen(user_query)                   — Groq multimodal call with screen+query
+  def __init__(client=None)                        — accept Groq client
+  def capture_screen()                             — pyautogui screenshot → base64
+  def analyze_screen(user_query)                   — Groq multimodal call
+
+backend\stt_service.py
+----------------------
+(module-level wrappers used by processor.speech_to_text)
 
 backend\tts_service.py
 ----------------------
 async def generate_tts_streaming(text)             — yields MP3 chunks via edge-tts
 async def generate_tts_file(text)                  — writes MP3 to disk, returns path
 
-backend\stt_service.py
-----------------------
-(Module-level Groq + Vosk wrappers used by processor.speech_to_text)
+================================================================================
+6. BACKEND FASTAPI — ENDPOINT INVENTORY
+================================================================================
+WebSocket
+  WS    /ws                          Primary bidirectional streaming
+
+REST (legacy / fallback)
+  POST  /stt                         Upload audio → transcript JSON
+  POST  /ask                         Text → non-streaming LLM
+  POST  /translate                   Hinglish/Hindi → English
+  POST  /tts                         Text → MP3 response
+  POST  /process-audio               Bundled STT→LLM→TTS
+  GET   /health                      Liveness probe
+
+NexusVault (new in v3.2)
+  GET   /api/nexus/status            { initialized: bool }
+  POST  /api/nexus/initialize        { password } → 200/409
+  POST  /api/nexus/files             { password } → { files: [...] }
+  POST  /api/nexus/upload            multipart file + password
+  POST  /api/nexus/download          { password, uuid } → StreamingResponse + filename header
+  POST  /api/nexus/delete            { password, uuid } → 200
+
+Limits:
+  Inbound text          : 4 000 chars (_MAX_INBOUND_CHARS)
+  Audio upload          : 25 MiB
+  Vault upload          : 100 MiB
+  Password              : ≥ 6 chars, ≤ 512 chars
 
 ================================================================================
-5. BACKEND FASTAPI — ENDPOINT INVENTORY
+7. LLM TOOL REGISTRY — REGISTERED TOOLS
 ================================================================================
-Method   Path             Purpose
--------- ---------------- ------------------------------------------------------
-WS       /ws              Primary bidirectional streaming (chat + audio + telemetry)
-POST     /stt             Upload audio → transcript JSON
-POST     /ask             Text → non-streaming LLM completion
-POST     /translate       Hinglish/Hindi → English
-POST     /tts             Text → MP3 audio response
-POST     /process-audio   Bundled STT→LLM→TTS cycle (legacy fallback)
-GET      /health          Liveness probe
-
-CORS allow-list: env ALLOWED_ORIGINS (CSV); default http://localhost:3000
-Inbound text cap: 4000 chars (_MAX_INBOUND_CHARS)
-Inbound audio cap: 25 MiB (_MAX_AUDIO_BYTES)
-
-================================================================================
-6. LLM TOOL REGISTRY — ALL REGISTERED TOOLS
-================================================================================
-(Defined in backend\core\tool_registry.py _TOOLS tuple — exposed to Groq via
-TOOL_DEFINITIONS, dispatched through execute_tool().)
-
 Tool Name                  Required Args       Purpose
 -------------------------  ------------------  -------------------------------
-get_system_status          (none)              CPU/RAM/disk snapshot
+get_system_status          (none)              CPU/RAM/disk via psutil
 get_time_and_date          (none)              Local datetime
-get_platform_info          (none)              OS / arch info
-purge_memory               (none)              Wipe long-term ChromaDB store
-analyze_screen             query               Vision: screenshot + LLM answer
-execute_terminal_command   command             Allow-list shell (see §7)
+get_platform_info          (none)              OS / arch / Python version
+purge_memory               (none)              Wipe ChromaDB collection
+analyze_screen             query               Vision: screenshot + LLM
+execute_terminal_command   command             Sandboxed shell (Docker/Job/hardened)
 create_file                path, content       UTF-8 write inside sandbox
-search_files               query [, root_dir]  Glob search inside sandbox
+search_files               query [, root_dir]  Glob inside sandbox
 read_file                  path                UTF-8 read inside sandbox (≤1 MiB)
-web_search                 query               DuckDuckGo text search
-get_weather                location            DuckDuckGo weather lookup
-export_conversation        [format=pdf|docx]   Generate PDF/DOCX of history
+web_search                 query               DuckDuckGo
+get_weather                location            DuckDuckGo weather
+export_conversation        [format=pdf|docx]   PDF/DOCX export
 
 ================================================================================
-7. SHELL COMMAND ALLOW-LIST (SECURITY SANDBOX)
+8. SHELL COMMAND ALLOW-LIST
 ================================================================================
-Defined in backend\core\security.py:_ALLOWED_BINARIES
-Anything not in this set is rejected. Shell metacharacters
-(`;` `&` `|` `` ` `` `$` `>` `<` `\n` `&&` `||` `$( )`) are independently denied.
+Defined in backend\core\security.py:_ALLOWED_BINARIES.
+Anything outside is denied. Shell metacharacters (`;` `&` `|` `` ` `` `$`
+`>` `<` `\n` `&&` `||` `$( )`) are independently denied.
 
 Filesystem      : ls, dir, pwd, cd, echo, cat, type
 Dev tooling     : git, node, npm, python, pip
@@ -273,86 +408,150 @@ Network         : ipconfig, ifconfig, ping
 Lookup          : where, which
 
 Sandbox root: env JARVIS_SANDBOX_ROOT or repo root (Path.resolve()).
-All file paths from tool handlers are forced through resolve_within_sandbox().
+Filesystem tool handlers funnel paths through resolve_within_sandbox().
 
 ================================================================================
-8. FRONTEND REACT — COMPONENT & HOOK INVENTORY
+9. SANDBOX EXECUTION BACKENDS
+================================================================================
+Module        : backend\core\sandbox.py
+Public entry  : run_sandboxed(command, timeout=8.0, max_output=2000)
+Selection     : JARVIS_SANDBOX_BACKEND env override; else
+                  windows_jobobject (Windows + pywin32) else hardened.
+
+BACKEND        LIMITS
+docker         --rm --network=none --read-only --cpus=0.5 --memory=256m
+               --pids-limit=64 --workdir <run_dir> --volume <run_dir>:ro
+               Image: $JARVIS_SANDBOX_DOCKER_IMAGE
+                      (alpine:3 on POSIX, nanoserver:ltsc2022 on Windows)
+
+windows_jobobject
+               JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+               | JOB_OBJECT_LIMIT_PROCESS_TIME
+               | JOB_OBJECT_LIMIT_PROCESS_MEMORY
+               | JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+               PerProcessUserTimeLimit  : timeout × 1e7 (100-ns units)
+               ActiveProcessLimit       : 16
+               ProcessMemoryLimit       : 256 MiB
+               Subprocess flag          : CREATE_NEW_PROCESS_GROUP
+               Trade-off                : no CREATE_SUSPENDED (subprocess.Popen
+                                          can't expose a thread handle for
+                                          ResumeThread). Microsecond race
+                                          window before AssignProcessToJobObject;
+                                          residual risk judged acceptable since
+                                          the allow-list excludes every cheap
+                                          fork-spawner (cmd, powershell, sh, …).
+
+hardened       env scrubbed to {SYSTEMROOT, WINDIR, COMSPEC, PATHEXT,
+                                TEMP, TMP, LANG, LC_ALL, LC_CTYPE, USERNAME}
+               PATH set to restricted system dirs only
+               CWD locked to <repo>/.sandbox_run/
+               creationflags=CREATE_NEW_PROCESS_GROUP (Windows)
+               start_new_session=True (POSIX)
+               Hard timeout enforced by subprocess.run.
+
+================================================================================
+10. NEXUSVAULT CRYPTOGRAPHIC PROFILE
+================================================================================
+Algorithm     : AES-256-GCM (16-byte tag, authenticated encryption).
+KDF           : PBKDF2-HMAC-SHA256, 100 000 iterations.
+Salt          : 16 bytes, `os.urandom`, per-encryption.
+IV            : 12 bytes, `os.urandom`, per-encryption.
+Layout        : SALT(16) || IV(12) || CIPHERTEXT
+Storage       : <repo>/vault/index.enc + <repo>/vault/<uuid>.enc per file.
+Tampering     : GCM auth-tag mismatch → ValueError (HTTP 401 at the router).
+Zero-knowledge: master password held only in request scope; never persisted.
+Secure shred  : on delete, file is overwritten with os.urandom (size-matched),
+                f.flush(), os.fsync(fileno()), then unlinked.
+                SSD wear-levelling caveat applies — true shred requires
+                whole-drive wipe or hardware secure-erase.
+
+================================================================================
+11. FRONTEND REACT — COMPONENT & HOOK INVENTORY
 ================================================================================
 Hooks (frontend\src\hooks\)
-  useBrain()                    — WS lifecycle, exponential-backoff reconnect,
-                                  health-check polling, visibility / online
-                                  event handlers, dynamic getApiUrl() resolver
-  useSpeech(onTranscriptChange, — mic capture, secure-context guard,
-            onFinalTranscript,    getUserMedia safety check, volume meter
-            isSpeaking)           (inner updateVolume RAF loop)
+  useBrain()                     — WS lifecycle, exponential-backoff reconnect,
+                                   health-check polling, structured-frame
+                                   consumer (tool_lifecycle / memory / vision),
+                                   visibility & online event handlers,
+                                   dynamic getApiUrl() resolver.
+  useSpeech(onTranscriptChange,  — mic capture, secure-context guard,
+            onFinalTranscript,     getUserMedia safety check,
+            isSpeaking)            volume meter (inner updateVolume RAF).
 
 Components (frontend\src\component\)
-  App.js               — Top-level shell; orchestrates hooks + lazy TTSService
-  Navbar               — Settings dropdown, INITIALIZE / STOP, blob controls
-  Hero                 — Splash hero panel
-  SplashScreen         — Boot animation
-  BrainTerminal        — Streaming chat panel (tokens, tool state, history)
-  VoiceControl         — Mic state, transcript preview, pipeline indicator
-  PuterStatus          — Neural-engine status pill ("isProcessing")
-  TranslationTerminal  — Translation result panel
-  SystemConsole        — Diagnostic log dump (visibility-toggled)
-  SystemStatus         — Live HUD bar: listening / thinking / speaking /
-                         backend connected / active tool / CPU+RAM telemetry
-  SystemAlert          — Auto-dismissing alert toast
-  blob.js (FireAIBlob) — Three.js particle visualiser; reacts to
-                         mic + TTS frequency intensity
+  App.js                — Top-level shell; orchestrates hooks + lazy TTSService
+  Navbar                — Tabs (HOME/CORE/NEXUS), settings dropdown,
+                          INITIALIZE / STOP, blob controls
+  Hero                  — Splash hero panel
+  SplashScreen          — Boot animation
+  BrainTerminal         — Streaming chat panel (tokens, tool state, history)
+                          regex URL parser for clickable links
+  VoiceControl          — Mic state, transcript preview, pipeline indicator
+  PuterStatus           — Neural-engine status pill (isProcessing)
+  TranslationTerminal   — Translation result panel (with isHighlighted)
+  SystemConsole         — Diagnostic log dump (visibility-toggled)
+  SystemStatus          — Live HUD bar: listening / thinking / speaking /
+                          backend connected / active tool / CPU+RAM telemetry
+  SystemAlert           — Auto-dismissing alert toast
+  NexusVault            — Encrypted vault UI (3 screens: uninit / locked /
+                          unlocked dashboard). Drag-drop upload, secure-shred
+                          delete, AES-GCM-256 indicator badge.
+  blob.js (FireAIBlob)  — Three.js particle visualiser; reacts to mic + TTS
+                          frequency intensity
 
 Globals (frontend\src\constants.js)
   SYSTEM_NAME, VERSION, SPLASH_DURATION, FADE_DURATION, HERO_TIMEOUT,
-  STATUS_LABELS, ALERTS, API_BASE_URL (env REACT_APP_API_URL or fallback)
+  STATUS_LABELS, ALERTS, API_BASE_URL
 
 ================================================================================
-9. FRONTEND SERVICES — METHOD INVENTORY
+12. FRONTEND SERVICES — METHOD INVENTORY
 ================================================================================
 frontend\src\services\TTSService.js
-  getAudioContext()         — lazy WebAudio context (resumes if suspended)
-  speak(text)               — speechSynthesis fallback path
-  playAudio(audioBlob)      — enqueue MP3 blob; spawn processQueue() if idle
-  processQueue()            — sequential blob playback through audio element
-  playAudioFallback(blob)   — minimal <audio> playback when WebAudio fails
-  stop()                    — abort speechSynthesis + current audio + source node
-  isPlaying()               — true while a buffer is actively rendering
-  getFrequencyData()        — analyser bin array for the Three.js blob
-  audioQueue                — public queue inspected by useBrain monitor
+  getAudioContext()      — lazy WebAudio context (resumes if suspended)
+  speak(text)            — speechSynthesis fallback path
+  playAudio(audioBlob)   — enqueue MP3 blob; spawn processQueue() if idle
+  processQueue()         — sequential blob playback through audio element
+  playAudioFallback(blob)— minimal <audio> playback when WebAudio fails
+  stop()                 — abort speechSynthesis + current audio + source node
+  isPlaying()            — true while a buffer is actively rendering
+  getFrequencyData()     — analyser bin array for the Three.js blob
+  audioQueue             — public queue inspected by useBrain monitor
 
 ================================================================================
-10. NPM / SHELL / VERIFICATION COMMANDS
+13. NPM / SHELL / VERIFICATION COMMANDS
 ================================================================================
 Root package.json scripts (run from repo root):
-  npm install                      Install frontend Node deps
-  npm run sync-env                 Copy root .env → frontend\.env + backend\.env
-                                   (auto-invoked by dev/start/backend)
-  npm run dev                      Concurrent BACKEND (cyan) + FRONTEND (magenta)
-  npm run backend                  cd backend && .venv\Scripts\python.exe main.py
-  npm start                        Frontend only (react-scripts start :3000)
-  npm run build                    React production bundle
-  npm test                         react-scripts test (interactive watcher)
+  npm install                          Install frontend Node deps
+  npm run sync-env                     Copy root .env → frontend\.env + backend\.env
+                                       (auto-invoked by dev/start/backend)
+  npm run dev                          Concurrent BACKEND (cyan) + FRONTEND (magenta)
+  npm run backend                      cd backend && .venv\Scripts\python.exe main.py
+  npm start                            Frontend only (react-scripts start :3000)
+  npm run build                        React production bundle
+  npm test                             react-scripts test (interactive)
   npm test --prefix frontend -- --testPathPattern=Component
-                                   Single React test
+                                       Single React test
 
 Python venv (Windows PowerShell):
-  & "backend\.venv\Scripts\python.exe" -m pip install -r backend\requirements.txt
+  py -3 -m venv backend\.venv
+  & "backend\.venv\Scripts\pip.exe" install -r backend\requirements.lock.txt
   & "backend\.venv\Scripts\python.exe" backend\main.py
 
-System Python fallback (when .venv trampoline is broken):
-  py -3 -m py_compile backend\main.py backend\core\processor.py \
-       backend\core\memory.py backend\core\tool_registry.py \
-       backend\core\security.py backend\core\vision.py \
-       backend\stt_service.py backend\tts_service.py
-
 Verification triad before shipping:
-  1. py -3 -m py_compile <all backend .py>
-  2. npm run build --prefix frontend
-  3. npm run dev → open http://localhost:3000 → click INITIALIZE
-     → confirm mic capture, token stream, audio playback, telemetry frames
+  1. backend\.venv\Scripts\python.exe -m ruff check backend
+     --exclude backend/.venv --ignore E501
+  2. backend\.venv\Scripts\python.exe -m py_compile
+     backend\main.py backend\core\*.py backend\nexus_routes.py
+     backend\stt_service.py backend\tts_service.py
+  3. (cd frontend) && npx eslint src --ext .js --max-warnings 0
+  4. npm run build --prefix frontend
+  5. npm run dev → open http://localhost:3000 → click INITIALIZE
+     → confirm mic capture, token stream, audio playback,
+       telemetry frames, NEXUS tab loads & status returns
+       {"initialized":false} on a fresh checkout.
 
 ================================================================================
-11. WEBSOCKET WIRE PROTOCOL (`/ws`)
+14. WEBSOCKET WIRE PROTOCOL (v3.2 structured frames)
 ================================================================================
 Inbound JSON (client → server)
   {"type":"chat",          "text":"..."}            user turn (≤ 4000 chars)
@@ -360,210 +559,247 @@ Inbound JSON (client → server)
   {"type":"ping",          "timestamp":<num>}       client heartbeat
 
 Outbound JSON (server → client)
-  {"type":"status",        "data":"idle|thinking|speaking|observing"}
+  {"type":"status",        "data":"idle|thinking|speaking|history_cleared"}
   {"type":"token",         "data":"<token>"}        streamed LLM chunk
-  {"type":"response_end",  "data":"<full text>"}    final transcript for logs
+  {"type":"response_end",  "data":"<full text>"}    final transcript
   {"type":"audio_start"}                            next binary frames = MP3
   {"type":"telemetry",     "data":{"cpu":<f>,"ram":<f>,"status":"nominal|warning|critical"}}
   {"type":"pong",          "timestamp":<num>}
   {"type":"error",         "data":"<message>"}
+  {"type":"tool_lifecycle","state":"start"|"end","name":"<UPPER_TOOL_NAME>"}  ★ NEW
+  {"type":"memory",        "state":"active"}                                  ★ NEW
+  {"type":"vision",        "state":"start"|"end"}                             ★ NEW
 
 Outbound binary
   Raw MP3 frames (Edge TTS output). Serialised via asyncio.Lock so no
   binary frame can interleave with a JSON token frame.
 
-In-stream sentinel markers (inside the token stream, NOT separate frames)
-  [MEMORY_ACTIVE]   — ChromaDB recall hit; HUD lights memory badge
-  [VISION_ACTIVE]   — analyze_screen invoked; HUD lights vision badge
-  [VISION_ENDED]    — vision call returned
-  [TOOL_START:NAME] — tool call begun (NAME upper-cased)
-  [TOOL_END:NAME]   — tool call finished
+DEPRECATED in v3.2 (no longer emitted):
+  In-stream sentinel strings [MEMORY_ACTIVE], [VISION_ACTIVE],
+  [VISION_ENDED], [TOOL_START:<NAME>], [TOOL_END:<NAME>]. These are now
+  carried as dedicated structured frames above.
 
 ================================================================================
-12. ENVIRONMENT VARIABLES (BOOT-TIME)
+15. ENVIRONMENT VARIABLES
 ================================================================================
-GROQ_API_KEY               REQUIRED. Server raises RuntimeError on boot if
-                           missing or equal to the `gsk_your_key…` placeholder.
-ALLOWED_ORIGINS            CSV of CORS origins; default `http://localhost:3000`.
-                           No wildcard. Add LAN IPs explicitly.
-BACKEND_PORT               Default 8000 (read by deploy.ps1 / orchestrator).
-JARVIS_SANDBOX_ROOT        Override for security.py SANDBOX_ROOT; defaults to
-                           repo root.
-REACT_APP_API_URL          Optional override for getApiUrl() in useBrain.js.
-                           If unset, hook derives `${protocol}//${hostname}:8000`.
+GROQ_API_KEY                  REQUIRED. RuntimeError at boot if missing or
+                              equal to `gsk_your_key…` placeholder.
+ALLOWED_ORIGINS               CSV of CORS origins; default localhost:3000.
+                              No wildcard. Add LAN IPs explicitly.
+BACKEND_PORT                  Default 8000.
+JARVIS_SANDBOX_ROOT           Override for security.SANDBOX_ROOT;
+                              defaults to repo root.
+JARVIS_SANDBOX_BACKEND        ★ NEW. `docker` / `windows_jobobject` / `hardened`;
+                              else auto-detected.
+JARVIS_SANDBOX_DOCKER_IMAGE   ★ NEW. Override docker image. Default:
+                              alpine:3 (POSIX) / nanoserver:ltsc2022 (Windows).
+REACT_APP_API_URL             Frontend override for getApiUrl() resolver.
 
 ================================================================================
-13. KNOWN BUGS, OPEN ERRORS, AND LATENT RISKS
+16. FILES DELETED IN v3.2 CLEANUP
 ================================================================================
-[BUG-01] backend\.venv trampoline is broken on this host.
-         Symptom: `& backend\.venv\Scripts\python.exe …` →
-                  "uv trampoline failed to spawn Python child process".
-         Impact : `npm run backend` cannot launch the FastAPI server.
-         Fix    : Recreate the venv —
-                  py -3 -m venv backend\.venv
-                  & "backend\.venv\Scripts\python.exe" -m pip install \
-                      -r backend\requirements.txt
+Source files removed (tracked):
+  path.txt                              — 2-byte UTF-16 BOM garbage
+  backend\pom.xml                       — Maven POM in a Python/Node project
+  backend\settings.xml                  — Maven settings with cleartext
+                                          admin/admin123 (security risk)
+  backend\deploy.ps1                    — Maven Nexus repo deploy script
+  backend\scratch\purge_stark.py        — gitignored debug utility
+  backend\scratch\test_security.py      — broken (referenced _is_safe_path /
+                                          _is_safe_command that no longer
+                                          exist on JarvisProcessor)
+  scratch\dump_memory.py                — gitignored debug utility
 
-[BUG-02] frontend\node_modules is absent.
-         Symptom: `npm run build --prefix frontend` →
-                  "'react-scripts' is not recognized…"
-         Fix    : `npm install --prefix frontend`
+Regenerable artefacts cleared:
+  backend\__pycache__\, backend\core\__pycache__\
+  .ruff_cache\
+  .sandbox_run\         (re-created on next sandboxed call)
+  vault\                (re-created on next NexusVault initialize)
+  frontend\build\       (re-create via `npm run build`)
 
-[BUG-03] requirements.txt has NO version pins.
-         Risk   : Reproducibility — a fresh install today may pull
-                  breaking releases of chromadb / groq / fastapi.
-         Fix    : Pin every line (e.g., `groq==0.11.0`) and commit a
-                  `pip freeze > backend\requirements.lock.txt`.
+Code removed (dead symbols):
+  backend\core\security.py:run_safe_command   — superseded by sandbox.run_sandboxed
+  backend\core\processor.py:_VISION_MODEL     — duplicate (already lives in vision.py)
 
-[BUG-04] `_MAX_RESPONSE_TOKENS` / `_LLM_MODEL` constants govern behaviour
-         in processor.py but are not env-overridable. Switching to a
-         larger context model requires a code edit + redeploy.
+Files preserved (intentional):
+  voice_pack\          — vendored ZipVoice TTS, planned alt engine
+  backend\memory_db\   — user's ChromaDB conversations
+  Project Report.pdf   — assignment artefact (May 12 baseline)
 
-[BUG-05] memory.py's automatic collection-rebuild on corruption is silent.
-         If ChromaDB is wiped during runtime no user-visible alert is
-         emitted — the HUD only learns about it via the next failed
-         recall.
+================================================================================
+17. KNOWN BUGS, OPEN ERRORS, LATENT RISKS
+================================================================================
+[BUG-01] No server-side timeout on stream_llm.
+         Symptom: if Groq stream stalls between server and Groq, the WS
+                  coroutine parks indefinitely. The client heartbeat
+                  catches a fully-dead connection, but not a slow trickle.
+         Fix    : wrap with `asyncio.wait_for(processor.stream_llm(...),
+                  timeout=N)`.
 
-[BUG-06] processor.stream_llm() catches `Exception` broadly and yields
-         a single fallback line. Loss of granularity — a rate-limit
+[BUG-02] No client-side tool watchdog.
+         Symptom: if `tool_lifecycle:start` is delivered but `:end` never
+                  is (server crash mid-tool), the HUD stays in tool_use
+                  until the heartbeat reconnects.
+         Fix    : per-tool 30 s timer in useBrain.js — set on
+                  `state==="start"`, clear on `state==="end"`, reset
+                  pipelineState + force reconnect on expiry.
+
+[BUG-03] Sandbox windows_jobobject backend races on subprocess spawn.
+         Symptom: between Popen and AssignProcessToJobObject (microseconds),
+                  the child could fork descendants outside the job.
+         Mitigation in place: allow-list excludes every cheap fork-spawner
+                  (cmd, powershell, bash, sh, perl, ruby, node REPL).
+         Hard fix: rewrite via win32process.CreateProcess with
+                  CREATE_SUSPENDED + ResumeThread (Popen doesn't expose
+                  thread handle).
+
+[BUG-04] Vosk model dir absence is silent.
+         Symptom: `_load_vosk_model` logs INFO and returns None. The
+                  cloud STT path then loses its safety net without any
+                  HUD signal.
+         Fix    : surface availability in /health and emit a startup
+                  banner on the WS.
+
+[BUG-05] Telemetry per-session psutil.cpu_percent cost.
+         Symptom: every WS session spawns its own 5-second telemetry loop.
+                  At N clients, cpu_percent runs N times per 5 s.
+         Fix    : centralise telemetry in a single asyncio task; fan-out
+                  to subscribers.
+
+[BUG-06] No rate limiting on /ws or REST endpoints. One curl loop can
+         drain the Groq token budget.
+         Fix    : SlowAPI or starlette-limiter; per-IP and per-session
+                  caps.
+
+[BUG-07] redact() doesn't cover all common keys. Currently matches Groq
+         `gsk_*`, OpenAI/generic `sk-*`, plus a generic key/token/secret
+         regex. Missing: Anthropic `sk-ant-*`, Google `AIza*`, AWS `AKIA*`.
+         Fix    : extend `_SECRET_PATTERNS`.
+
+[BUG-08] NexusVault secure-shred is best-effort on SSD.
+         Symptom: TRIM + wear-levelling mean the overwritten block may
+                  not be on the same physical cell. Cryptographic shred
+                  is the safest fallback (lose the master password).
+         Fix    : (informational) — document the limitation in UI; user
+                  may want full-disk encryption underneath.
+
+[BUG-09] No CSRF protection on NexusVault routes. Defended in practice
+         by the same-origin policy + CORS allow-list, but a same-origin
+         XSS would be sufficient to invoke the vault endpoints.
+         Fix    : add a CSRF token tied to the unlock session.
+
+[BUG-10] processor.stream_llm catches `Exception` broadly. A rate-limit
          error, a token-budget overflow, and a network drop all surface
-         as the same "Neural link interrupted" string.
+         as the same fallback line.
+         Fix    : typed handling per groq.* exceptions + structured
+                  `{"type":"error","code":...}` frame.
 
-[BUG-07] `_h_execute_terminal` allow-list permits `git`, `npm`, `pip`,
-         `python` — these accept sub-commands that themselves can mutate
-         state (e.g., `git reset --hard`, `pip install <evil>`). The
-         metachar regex blocks chaining but not subcommand abuse.
+[BUG-11] frontend/.eslintrc.js previously had
+         `'react-hooks/exhaustive-deps': 'off'`. That hid a real
+         missing-dep bug in App.js#handleInitialize (caught & fixed).
+         Now set to `'warn'`. Leave it on.
 
-[BUG-08] No rate limiting on /ws or REST endpoints. Public deployment
-         is one curl loop away from token-bill exhaustion.
+[BUG-12] processor.py mixes "Summarise"/"sir" Indian-English voice with
+         a couple of Hinglish-tinged exception strings. Localisation
+         strategy is undocumented — treat as cosmetic for now.
 
-[BUG-09] `redact()` matches Groq + OpenAI key shapes. Anthropic
-         (`sk-ant-…`), Google (`AIza…`), and Azure key formats are NOT
-         covered.
+[BUG-13] export_conversation schema lacks `"required": ["format"]`.
+         Groq may emit empty args, falling through to implicit "pdf".
 
-[BUG-10] CORS `allow_credentials=True` combined with a non-wildcard
-         origin list is correct — but `allow_headers=["*"]` is broader
-         than necessary. Tighten to the actual request headers used.
-
-[BUG-11] Telemetry loop holds a 6-sample CPU history per WS session.
-         Many simultaneous clients won't accumulate state but still cost
-         psutil.cpu_percent() every 5 s per socket.
-
-[BUG-12] Frontend has NO test suite of its own (only react-scripts
-         scaffolding). `npm test` exits with "No tests found".
-
-[BUG-13] No backend tests of any kind. processor.py, memory.py,
-         security.py — all critical, all untested.
-
-[BUG-14] STT failover path: if Vosk model directory is missing,
-         `_load_vosk_model` logs a warning and returns None. The cloud
-         path will then silently lose its safety net — there is no
-         startup banner or HUD signal that fallback is disabled.
-
-[BUG-15] tts_service.py is a thin shim (2 functions). Frame-loss
-         recovery and resilient chunked streaming described in
-         README/CLAUDE.md is actually implemented inside processor.py's
-         text_to_speech_bytes, not in tts_service.py. The split is
-         confusing.
-
-[BUG-16] processor.py mixes Indian and English style ("Summarise",
-         "neural link") — fine — but also has Hindi-tinged exception
-         messages in a couple of paths. Localisation strategy is
-         undocumented.
-
-[BUG-17] export_conversation tool schema lacks `"required": ["format"]`
-         and has no explicit default — Groq may emit empty args, which
-         silently maps to the implicit `"pdf"` branch.
-
-[BUG-18] `_PURGE_TEMP_DIR` runs once at boot. Long-running sessions
-         that export many PDFs will see `backend\temp\` grow until
-         next restart.
+[BUG-14] backend\temp\ purge runs once at boot. Long-running sessions
+         that export many PDFs see the dir grow until next restart.
+         Fix    : asyncio task on 10-minute cadence.
 
 ================================================================================
-14. RECOMMENDED UPGRADES
+18. RECOMMENDED UPGRADES
 ================================================================================
-SHORT-TERM (1–3 days)
-  U-01 Pin all dependencies (requirements.txt + package-lock.json checked in)
-       and commit a `backend\requirements.lock.txt` from `pip freeze`.
-  U-02 Add ruff + mypy (strict) to backend; add eslint --max-warnings 0
-       to frontend; wire both into a `npm run lint` script (currently
-       advertised in old docs but does not exist).
-  U-03 Add pytest with at minimum:
-         test_security_allow_list, test_resolve_within_sandbox_escape,
-         test_memory_roundtrip, test_redact_groq_key, test_stream_llm_smoke.
-  U-04 Replace `print(...)` debugging paths with `logger.*` everywhere.
-  U-05 Surface STT fallback availability in the /health payload so the
-       HUD can show "Vosk: ready | unavailable".
-  U-06 Tighten CORS `allow_headers` to the explicit set (Content-Type,
-       Authorization).
+SHORT-TERM (1-3 days)
+  U-01  Add ruff + mypy(strict) to backend; eslint --max-warnings 0 to
+        frontend; wire both into npm scripts so `npm run lint` actually
+        exists.
+  U-02  pytest suite. At minimum:
+          test_security_allow_list, test_resolve_within_sandbox_escape,
+          test_memory_roundtrip, test_redact_groq_key,
+          test_sandbox_blocks_unlisted, test_sandbox_kills_runaway,
+          test_nexus_round_trip (init→upload→list→download→delete).
+  U-03  Replace remaining `print(...)` with `logger.*` everywhere.
+  U-04  Surface STT/Vosk availability in /health.
+  U-05  asyncio.wait_for around stream_llm (BUG-01).
+  U-06  Client-side tool watchdog (BUG-02).
 
-MID-TERM (1–2 weeks)
-  U-07 Add SlowAPI (or starlette-limiter) rate limiting to /ws and REST
-       endpoints. Per-IP and per-session token-budget caps.
-  U-08 Replace broad `except Exception` in stream_llm with typed
-       handling for groq.RateLimitError, openai.APITimeoutError, etc.,
-       and emit a structured `{"type":"error","code":...}` frame.
-  U-09 Promote `_LLM_MODEL`, `_MAX_RESPONSE_TOKENS`, `_CONDENSE_FROM`,
-       `_MAX_INBOUND_CHARS`, audio cap to environment-driven config
-       with a `Settings(BaseSettings)` Pydantic model.
-  U-10 Migrate the WS protocol to a versioned schema (e.g.,
-       `{"v":1,"type":"chat",...}`) so future breaking changes can
-       coexist.
-  U-11 Replace in-stream sentinel markers (`[TOOL_START:…]`) with
-       dedicated JSON frames — current markers force the HUD to parse
-       the token stream, which fights any genuine `[` in user text.
-  U-12 Extend `redact()` to cover Anthropic (`sk-ant-*`), Google
-       (`AIza*`), and AWS access keys (`AKIA*`).
-  U-13 Periodic temp-dir GC (asyncio task on a 10-min cadence) to
-       prevent unbounded growth between restarts.
-  U-14 Replace pyautogui-based screenshot with a headless capture
-       (mss) — pyautogui requires an active session and breaks under
-       RDP / locked screen.
+MID-TERM (1-2 weeks)
+  U-07  SlowAPI rate limiting on /ws + REST + NexusVault.
+  U-08  Promote `_LLM_MODEL`, `_MAX_RESPONSE_TOKENS`, `_CONDENSE_FROM`,
+        `_MAX_INBOUND_CHARS`, sandbox limits to a Pydantic
+        Settings(BaseSettings) model — env-driven.
+  U-09  Migrate WS protocol to versioned schema
+        ({"v":1,"type":"chat",...}).
+  U-10  Extend redact() (Anthropic sk-ant-*, Google AIza*, AWS AKIA*).
+  U-11  Periodic temp-dir GC.
+  U-12  Replace pyautogui screenshot with `mss` (works under RDP /
+        locked screen; pyautogui doesn't).
+  U-13  CSRF token on NexusVault.
+  U-14  Typed exception handling in stream_llm (BUG-10).
 
 LONG-TERM (project-level)
-  U-15 Self-hosted TTS (Coqui XTTS, F5-TTS) to eliminate Edge TTS
-       hard dependency and cut latency on poor uplinks.
-  U-16 Per-tool sandboxing: run `_h_execute_terminal` inside a
-       restricted Windows AppContainer / Linux user namespace.
-  U-17 Adopt DSPy or LangGraph for the multi-pass tool-routing logic
-       in stream_llm — current two-pass `tool_choice=auto` → reply
-       flow is duplicated and brittle.
-  U-18 Replace ChromaDB persistent store with Qdrant or LanceDB once
-       memory crosses ~100k turns; ChromaDB's HNSW rebuilds get slow.
-  U-19 GraphRAG layer on top of memory.py — current cosine recall
-       loses multi-turn entity continuity.
-  U-20 Native desktop wrapper (Tauri / Electron) so the secure-context
-       guard is moot and the mic always works.
-  U-21 Move the visualizer (Three.js blob) into a Web Worker /
-       OffscreenCanvas; current main-thread render contends with React
-       reconciliation under heavy token bursts.
-  U-22 Telemetry to Prometheus + Grafana; today's `psutil`-only stream
-       gives the HUD a number but no historical view.
-  U-23 Multi-user support: today's processor singleton + global
-       conversation_history makes J.A.R.V.I.S a single-tenant assistant.
-  U-24 Add OpenTelemetry tracing across /ws → processor → tool → Groq
-       so a slow tool call can be located without log archaeology.
+  U-15  Self-hosted TTS via voice_pack/zipvoice — eliminate Edge TTS
+        external dep; cut latency on poor uplinks.
+  U-16  Promote sandbox to a true Windows AppContainer (capability SIDs +
+        container profile) or use Sandboxie-Plus. Closes the residual
+        race window (BUG-03).
+  U-17  DSPy or LangGraph for the multi-pass tool-routing flow in
+        stream_llm. Current two-pass `tool_choice=auto` → reply is
+        duplicated and brittle.
+  U-18  Migrate memory store to Qdrant or LanceDB at ~100k turns;
+        ChromaDB's HNSW rebuilds get slow.
+  U-19  GraphRAG layer on top of memory.py — cosine recall loses
+        multi-turn entity continuity.
+  U-20  Native desktop wrapper (Tauri / Electron) so the secure-context
+        guard is moot and the mic always works.
+  U-21  Move Three.js blob render to a Web Worker / OffscreenCanvas;
+        currently contends with React reconciliation under heavy token
+        bursts.
+  U-22  Telemetry to Prometheus + Grafana.
+  U-23  Multi-user support — today's processor singleton + global
+        conversation_history makes J.A.R.V.I.S single-tenant.
+  U-24  OpenTelemetry tracing across /ws → processor → tool → Groq.
 
 ================================================================================
-15. OPERATIONAL NOTES FOR FUTURE MAINTAINERS
+19. OPERATIONAL NOTES FOR FUTURE MAINTAINERS
 ================================================================================
-* Always run `npm run sync-env` (auto-invoked by `dev`/`start`/`backend`)
-  before referencing .env from frontend or backend — the root .env is the
-  single source of truth.
+* `npm run sync-env` is auto-invoked by dev/start/backend — never edit
+  frontend/.env or backend/.env directly; they're overwritten on every
+  boot from root .env.
+
 * Mic-mute-during-TTS pattern in useBrain.js is load-bearing. Do not
-  inline-optimise the 100 ms polling away without replacing it with
-  an event-based equivalent (TTSService would need a `playbackDrained`
+  inline-optimise the 100 ms polling away without replacing it with an
+  event-based equivalent (TTSService would need a `playbackDrained`
   event).
-* The two-pass LLM call (tool_choice="auto" then stream) doubles the
-  Groq round-trip on every turn; do not "optimise" by collapsing them
-  without re-deriving how tool results re-enter the message list.
-* `processor.py` boot-time work includes ChromaDB open + Vosk load +
-  Groq client init. Cold start is ~1.5 s on a warm cache; lazy
-  imports of fpdf / python-docx keep it under 2 s.
+
+* The two-pass LLM call (tool_choice=auto then stream) doubles the Groq
+  round-trip on every turn. Do not collapse into one pass without
+  re-deriving how tool results re-enter the message list.
+
+* core.sandbox is the SINGLE entry point for shell execution. Never call
+  subprocess.run from a tool handler. The allow-list is re-validated
+  inside the sandbox, but bypassing it skips the env scrub, locked CWD,
+  and job-object lifetime control.
+
+* NexusVault master password is *never* persisted server-side. Forgetting
+  it is permanent loss. The encrypted blobs without the password are
+  computationally infeasible to decrypt — that's the point.
+
+* `react-hooks/exhaustive-deps` is `'warn'` in frontend/.eslintrc.js.
+  Leave it on. Previously was 'off' and hid a real missing-dep bug.
+
 * Pong logs (`type:"pong"`) are intentionally silent on the client
   console; do not re-enable without a feature flag.
 
+* The v3.2 structured-frame refactor means the HUD must never depend on
+  the literal sentinel strings `[TOOL_START:...]` etc. in `streamingText`.
+  They're gone.
+
 ================================================================================
                              STATUS: FULLY OPERATIONAL
-                          (post-conflict-resolution build)
+                        (v3.2 sandboxed + structured + locked)
 ================================================================================

@@ -17,13 +17,14 @@ abstraction (memory, vision, tools, security) and is composed here.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import glob
 import json
 import logging
 import os
 import uuid
-from typing import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import aiofiles
 import edge_tts
@@ -49,7 +50,6 @@ logger = logging.getLogger("jarvis.processor")
 # --- Constants ---------------------------------------------------------------
 
 _LLM_MODEL: str = "llama-3.1-8b-instant"
-_VISION_MODEL: str = "llama-3.2-11b-vision-preview"
 _VOICE: str = "en-GB-RyanNeural"
 
 _MAX_HISTORY: int = 12
@@ -227,10 +227,8 @@ class JarvisProcessor:
             return await self.speech_to_text_local(audio_content)
         finally:
             if os.path.exists(temp_path):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(temp_path)
-                except OSError:
-                    pass
 
     async def speech_to_text_local(self, audio_content: bytes) -> str:
         """
@@ -357,30 +355,38 @@ class JarvisProcessor:
 
     # --- LLM: streaming path -------------------------------------------------
 
-    def stream_llm(self, text: str) -> Iterator[str]:
+    def stream_llm(self, text: str) -> Iterator[dict]:
         """
-        Stream LLM tokens for a user prompt. Emits sentinel strings to let
-        the WebSocket layer drive HUD state transitions:
+        Stream LLM output for a user prompt as typed event dicts.
 
-        - ``"[MEMORY_ACTIVE]"``                  — RAG recall is active.
-        - ``"[VISION_ACTIVE]"`` / ``"[VISION_ENDED]"`` — vision call brackets.
-        - ``"[TOOL_START:<NAME>]"`` / ``"[TOOL_END:<NAME>]"`` — tool brackets.
+        Yielded shapes (control parameters are *never* embedded inside the
+        text token stream — they flow as their own structured events that
+        the WebSocket layer maps 1:1 to JSON frames):
+
+        - ``{"kind": "token",  "data": "<text>"}``
+        - ``{"kind": "event",  "type": "memory",         "state": "active"}``
+        - ``{"kind": "event",  "type": "vision",         "state": "start"|"end"}``
+        - ``{"kind": "event",  "type": "tool_lifecycle", "state": "start"|"end",
+              "name": "<UPPER_TOOL_NAME>"}``
 
         @param text  User prompt.
-        @yield       Tokens and sentinels in arrival order.
+        @yield       Events and tokens in arrival order.
         """
         if "Run system greeting" in text:
-            yield (
-                "Welcome back, sir. All systems are operational. Neural "
-                "link is stable, and I am standing by for your instructions."
-            )
+            yield {
+                "kind": "token",
+                "data": (
+                    "Welcome back, sir. All systems are operational. Neural "
+                    "link is stable, and I am standing by for your instructions."
+                ),
+            }
             return
 
         try:
             self._add_to_history("user", text)
             recall = self.memory.query_memory(text)
             if recall:
-                yield "[MEMORY_ACTIVE]"
+                yield {"kind": "event", "type": "memory", "state": "active"}
 
             messages: list[dict[str, str]] = [
                 {"role": "system",
@@ -407,9 +413,14 @@ class JarvisProcessor:
                     name = call.function.name
                     is_vision = name == "analyze_screen"
                     if is_vision:
-                        yield "[VISION_ACTIVE]"
+                        yield {"kind": "event", "type": "vision", "state": "start"}
                     else:
-                        yield f"[TOOL_START:{name.upper()}]"
+                        yield {
+                            "kind": "event",
+                            "type": "tool_lifecycle",
+                            "state": "start",
+                            "name": name.upper(),
+                        }
 
                     name, result = self._run_tool(call)
                     messages.append({
@@ -420,9 +431,14 @@ class JarvisProcessor:
                     })
 
                     if is_vision:
-                        yield "[VISION_ENDED]"
+                        yield {"kind": "event", "type": "vision", "state": "end"}
                     else:
-                        yield f"[TOOL_END:{name.upper()}]"
+                        yield {
+                            "kind": "event",
+                            "type": "tool_lifecycle",
+                            "state": "end",
+                            "name": name.upper(),
+                        }
 
                 # Pass 2: stream the synthesised reply.
                 stream = self.client.chat.completions.create(
@@ -445,7 +461,7 @@ class JarvisProcessor:
                 token = chunk.choices[0].delta.content
                 if token:
                     full_response += token
-                    yield token
+                    yield {"kind": "token", "data": token}
 
             self._add_to_history("assistant", full_response)
             self.memory.store_memory(text, full_response)
@@ -453,7 +469,7 @@ class JarvisProcessor:
             logger.error("LLM stream failed: %s", redact(str(exc)))
             fallback = "I'm sorry, sir. Neural link interrupted."
             self._add_to_history("assistant", fallback)
-            yield fallback
+            yield {"kind": "token", "data": fallback}
 
     # --- Translation ---------------------------------------------------------
 

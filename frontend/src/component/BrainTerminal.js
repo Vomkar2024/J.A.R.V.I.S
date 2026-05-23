@@ -8,7 +8,7 @@ import { STATUS_LABELS } from '../constants';
 const renderMessageWithLinks = (text) => {
   if (!text) return '';
   // Match standard URLs (http/https) or www. links
-  const urlRegex = /(https?:\/\/[^\s\+]+|www\.[^\s\+]+)/g;
+  const urlRegex = /(https?:\/\/[^\s+]+|www\.[^\s+]+)/g;
   const parts = text.split(urlRegex);
   
   return parts.map((part, i) => {

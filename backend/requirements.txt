@@ -15,3 +15,5 @@ pillow
 duckduckgo-search
 python-docx
 fpdf
+cryptography
+pywin32; sys_platform == "win32"

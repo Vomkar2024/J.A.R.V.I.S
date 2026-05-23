@@ -22,12 +22,13 @@ import glob
 import json
 import platform
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
+from collections.abc import Callable
 
+from core.sandbox import run_sandboxed
 from core.security import (
     redact,
     resolve_within_sandbox,
-    run_safe_command,
     SANDBOX_ROOT,
 )
 
@@ -138,9 +139,16 @@ def _h_analyze_screen(args: dict[str, Any], ctx: ToolContext) -> str:
 
 
 def _h_execute_terminal(args: dict[str, Any], _: ToolContext) -> str:
-    """Run an allow-listed shell command without invoking a shell."""
+    """
+    Run an allow-listed shell command inside an isolated execution backend.
+
+    The command never touches the host OS environment directly: it is
+    routed through :func:`core.sandbox.run_sandboxed`, which picks
+    Docker / Windows Job Object / hardened-subprocess based on
+    ``JARVIS_SANDBOX_BACKEND`` and runtime capability detection.
+    """
     command = args.get("command", "")
-    return run_safe_command(command)
+    return run_sandboxed(command)
 
 
 def _h_create_file(args: dict[str, Any], _: ToolContext) -> str:

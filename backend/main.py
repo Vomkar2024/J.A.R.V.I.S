@@ -17,11 +17,13 @@ Security posture
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Final
+from typing import Annotated, Final
 
 from dotenv import find_dotenv, load_dotenv
 from fastapi import (
@@ -39,6 +41,7 @@ from pydantic import BaseModel, Field
 
 from core.processor import JarvisProcessor
 from core.security import redact
+from nexus_routes import router as nexus_router
 
 try:
     import psutil
@@ -101,6 +104,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+app.include_router(nexus_router)
 
 
 class ChatRequest(BaseModel):
@@ -219,29 +224,35 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
                 full_response = ""
                 try:
-                    for token in processor.stream_llm(user_text):
-                        if token == "[VISION_ACTIVE]":
-                            await send_json({"type": "status", "data": "observing"})
+                    for event in processor.stream_llm(user_text):
+                        kind = event.get("kind")
+                        if kind == "token":
+                            data = event.get("data", "")
+                            full_response += data
+                            await send_json({"type": "token", "data": data})
+                            await asyncio.sleep(0)
                             continue
-                        if token == "[VISION_ENDED]":
-                            await send_json({"type": "status", "data": "thinking"})
+
+                        if kind != "event":
                             continue
-                        if token == "[MEMORY_ACTIVE]":
-                            await send_json({"type": "status", "data": "memory_access"})
-                            continue
-                        if token.startswith("[TOOL_START:"):
+
+                        ev_type = event.get("type")
+                        if ev_type == "memory":
                             await send_json({
-                                "type": "status",
-                                "data": "tool_use",
-                                "tool": token[len("[TOOL_START:"):-1],
+                                "type": "memory",
+                                "state": event.get("state", "active"),
                             })
-                            continue
-                        if token.startswith("[TOOL_END:"):
-                            await send_json({"type": "status", "data": "thinking"})
-                            continue
-                        full_response += token
-                        await send_json({"type": "token", "data": token})
-                        await asyncio.sleep(0)
+                        elif ev_type == "vision":
+                            await send_json({
+                                "type": "vision",
+                                "state": event.get("state"),
+                            })
+                        elif ev_type == "tool_lifecycle":
+                            await send_json({
+                                "type": "tool_lifecycle",
+                                "state": event.get("state"),
+                                "name": event.get("name"),
+                            })
                 except Exception as exc:
                     logger.error("LLM stream error: %s", redact(str(exc)))
                     full_response = "I'm sorry, sir. Neural link interrupted."
@@ -271,10 +282,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         telemetry_task.cancel()
         keepalive_task.cancel()
         for task in (telemetry_task, keepalive_task):
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
-            except (asyncio.CancelledError, Exception):
-                pass
         logger.info("Connection cleanup complete.")
 
 
@@ -284,7 +293,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
 @app.post("/stt")
 async def speech_to_text(
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
     mode: str = "cloud",
 ) -> dict:
     """
@@ -310,7 +319,7 @@ async def speech_to_text(
         raise
     except Exception as exc:
         logger.error("STT error: %s", redact(str(exc)))
-        raise HTTPException(500, "STT failed")
+        raise HTTPException(500, "STT failed") from exc
 
 
 @app.post("/ask")
@@ -320,7 +329,7 @@ async def ask_llm(request: ChatRequest) -> dict:
         return {"response": await processor.ask_llm(request.text)}
     except Exception as exc:
         logger.error("Ask error: %s", redact(str(exc)))
-        raise HTTPException(500, "ask failed")
+        raise HTTPException(500, "ask failed") from exc
 
 
 @app.post("/translate")
@@ -330,7 +339,7 @@ async def translate_text(request: ChatRequest) -> dict:
         return {"translation": await processor.translate_text(request.text)}
     except Exception as exc:
         logger.error("Translate error: %s", redact(str(exc)))
-        raise HTTPException(500, "translation failed")
+        raise HTTPException(500, "translation failed") from exc
 
 
 @app.post("/tts")
@@ -351,13 +360,13 @@ async def text_to_speech(
         raise
     except Exception as exc:
         logger.error("TTS error: %s", redact(str(exc)))
-        raise HTTPException(500, "TTS failed")
+        raise HTTPException(500, "TTS failed") from exc
 
 
 @app.post("/process-audio")
 async def process_audio(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
 ):
     """End-to-end audio → audio cycle."""
     try:
@@ -383,7 +392,7 @@ async def process_audio(
         raise
     except Exception as exc:
         logger.error("Process-audio error: %s", redact(str(exc)))
-        raise HTTPException(500, "processing failed")
+        raise HTTPException(500, "processing failed") from exc
 
 
 @app.get("/health")

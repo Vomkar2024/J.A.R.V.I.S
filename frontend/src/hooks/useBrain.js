@@ -80,7 +80,7 @@ export const useBrain = () => {
   // Helper to add system logs
   const addLog = useCallback((message, type = 'info') => {
     setSystemLogs(prev => [{
-      id: Date.now() + Math.random().toString(36).substr(2, 9),
+      id: Date.now() + Math.random().toString(36).slice(2, 11),
       message,
       type,
       timestamp: Date.now()
@@ -278,13 +278,37 @@ export const useBrain = () => {
                 } else {
                   setPipelineState('idle');
                 }
-              } else if (message.data === 'observing') {
-                setPipelineState('observing');
               } else if (message.data === 'history_cleared') {
                 setConversationHistory([]);
-              } else if (message.data === 'tool_use') {
+              }
+              break;
+
+            // --- Structured control-plane frames (v3.2 protocol) ---
+            // Control parameters are no longer embedded in the token stream
+            // as `[TOOL_START:...]` sentinels — each lifecycle transition
+            // arrives as its own JSON frame.
+            case 'tool_lifecycle':
+              if (message.state === 'start') {
                 setPipelineState('tool_use');
-                setActiveTool(message.tool || 'SYSTEM_TASK');
+                setActiveTool(message.name || 'SYSTEM_TASK');
+              } else if (message.state === 'end') {
+                setActiveTool('');
+                setPipelineState('thinking');
+              }
+              break;
+
+            case 'memory':
+              if (message.state === 'active') {
+                setPipelineState('memory_access');
+                addLog('Long-term memory recall engaged', 'info');
+              }
+              break;
+
+            case 'vision':
+              if (message.state === 'start') {
+                setPipelineState('observing');
+              } else if (message.state === 'end') {
+                setPipelineState('thinking');
               }
               break;
 

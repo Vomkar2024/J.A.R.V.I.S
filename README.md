@@ -1,150 +1,134 @@
-# J.A.R.V.I.S v4.0.0 — The Resilient Neural AI Ecosystem
+# J.A.R.V.I.S v3.2 — Resilient Neural Assistant + NexusVault
+
 **Jointly Advanced & Real-time Visionary Intelligence System**
 
-### 🌟 Introduction
-J.A.R.V.I.S is a high-fidelity, voice-first artificial intelligence interface designed to emulate the sophisticated assistants of sci-fi cinema. This v4.0.0 "Resilient Neural Link" upgrade hardens the system with local fallbacks, enhanced security, and improved memory recall logic. He is designed to be your ultimate digital companion, capable of managing your files, searching the web, and seeing the world through your screen.
+A voice-first AI desktop assistant: real-time WebSocket streaming, hybrid STT failover, sandboxed shell execution, and a zero-knowledge encrypted file vault — all behind a cinematic Three.js HUD.
 
 ---
 
-## 🛠️ The Tech Stack (What J.A.R.V.I.S is made of)
+## What's New in v3.2
 
-To build a brain this powerful, we used a mix of the world's best software "ingredients":
-
-| Category | Technology Used | What it does |
-| :--- | :--- | :--- |
-| **Language** | **JavaScript (React)** | The "Skin" and "Eyes" (The beautiful HUD you see). |
-| **Language** | **Python (FastAPI)** | The "Central Nervous System" (Processing everything). |
-| **Brain** | **Groq LPU (Llama 3.1)** | The "Thinking Engine" (Super-fast AI logic). |
-| **Hearing** | **Whisper & Vosk** | The "Ears" (Turning your voice into text). |
-| **Speaking** | **Edge TTS** | The "Voice Box" (Talking back to you). |
-| **Memory** | **ChromaDB** | The "Long-term Memory" (Remembering past chats). |
-| **Visuals** | **Three.js** | The "Pulse" (The glowing glowing blob visualizer). |
+- **Sandboxed shell execution** — `execute_terminal_command` runs inside a Docker container, a Windows Job Object, or a hardened subprocess. Selection via `JARVIS_SANDBOX_BACKEND` or runtime capability probe.
+- **Structured WebSocket control frames** — `tool_lifecycle`, `memory`, `vision` events are now their own JSON frames. Sentinels like `[TOOL_START:…]` are no longer embedded inside the token stream.
+- **NexusVault** — AES-256-GCM zero-knowledge encrypted storage. PBKDF2-HMAC-SHA256 KDF (100 000 iterations), per-file random IV + salt, byte-overwrite secure-shred on delete. Exposed at `/api/nexus/*` to the React HUD.
+- **Pinned dependencies** — `backend/requirements.lock.txt` (`pip freeze`) checked in for reproducible builds.
 
 ---
 
-## 📋 System Requirements
+## Tech Stack
 
-Before you wake up J.A.R.V.I.S, make sure your computer has these "supplies" ready:
-
-1.  **Node.js (v18 or higher)**: Needed to run the HUD.
-2.  **Python (v3.10 or higher)**: Needed to run the Neural Core.
-3.  **Internet Connection**: Needed for the high-speed Groq brain and Edge voice.
-4.  **Microphone**: So J.A.R.V.I.S can hear you!
-5.  **Speaker/Headphones**: So you can hear J.A.R.V.I.S!
-6.  **Groq API Key**: Your ticket to the fastest AI on the planet.
-
----
-
-## 🚀 The Neural Link Architecture
-
-Traditional AI applications suffer from high latency and lack of context. J.A.R.V.I.S v4.0.0 solves this with a **Persistent WebSocket Core**:
-
-1. **Parallel Streaming**: Tokens and binary audio chunks are streamed simultaneously. J.A.R.V.I.S begins speaking while he is still generating his response, reducing latency to near-zero.
-2. **Predictive Telemetry**: The system monitors CPU/RAM trends and can proactively warn the user of system instability.
-3. **Bi-Directional HUD**: The frontend and backend maintain a constant state sync, allowing for complex visual signals (Vision active, Memory access, Tool usage).
+| Layer | Technology | Role |
+|---|---|---|
+| HUD | **React 19 + Three.js** | Glassmorphism dashboard + particle visualizer |
+| Core | **Python 3.10+ + FastAPI** | WebSocket server, REST, lifecycle |
+| Brain | **Groq Llama 3.1 8B** | Sub-second streaming completions |
+| Vision | **Groq Llama 3.2 11B Vision** | Screenshot Q&A |
+| Hearing | **Whisper Large V3 Turbo + Vosk** | Cloud STT with local failover |
+| Voice | **Edge Neural TTS (RyanNeural)** | Chunked MP3 streaming |
+| Memory | **ChromaDB** | Persistent RAG with timestamped recall |
+| Storage | **AES-256-GCM** (`cryptography`) | NexusVault zero-knowledge vault |
+| Isolation | **Docker / Job Object / hardened subprocess** | Shell-tool sandbox |
 
 ---
 
-## 🧠 Core System Modules
+## Requirements
 
-### 1. Perception & Vision
-- **Audio**: Hybrid STT Pipeline. J.A.R.V.I.S uses **Whisper Large V3 Turbo** for cloud speed, with an **Automated Local Vosk Fallback** to ensure he stays "listening" even if the cloud connection flickers.
-- **Visuals**: **Jarvis Vision Engine** allows J.A.R.V.I.S to "see" your screen, providing context-aware assistance for coding, debugging, or research.
-
-### 2. Cognition (The Brain)
-- **Engine**: Groq LPU™ (Language Processing Unit) running Llama 3.1 8B Instant.
-- **Memory**: Integrated **ChromaDB RAG Layer** with **Timestamped Recall**. J.A.R.V.I.S distinguishes between historical facts and current context using high-fidelity semantic boundaries.
-- **Condensing Logic**: Automatically summarizes long conversations to maintain deep context without hitting token limits.
-
-### 3. Synthesis (The Voice)
-- **Engine**: Microsoft Edge Neural TTS (Ryan profile).
-- **Logic**: Sophisticated British-adjacent tone with **Resilient Chunked Streaming**. If a binary frame is lost, the system auto-repairs the queue to maintain fluent speech.
-
-### 4. Manifestation (The HUD)
-- **Neural Core**: A Three.js particle visualizer that reacts to audio frequency data in real-time.
-- **Telemetry HUD**: Live monitoring of system vitals (CPU/RAM) integrated directly into the glassmorphism interface.
-
----
-
-## 🛠️ Integrated Tool Suite
-
-J.A.R.V.I.S is no longer confined to a chat box. He can now:
-- **Web Search**: Real-time information retrieval via DuckDuckGo.
-- **File System Control**: Create, read, and search files across your workspace.
-- **Terminal Access**: Execute shell commands and report back the results.
-- **Document Export**: Generate professional PDF or Word logs of your conversation history.
-- **Weather Analysis**: Fetch real-time weather data for any location.
-
----
-
-## 🔒 Security & Performance
-- **Hardened Neural Safety Protocol**: Sophisticated blocklist that intercepts destructive, system-altering, or data-leaking shell commands.
-- **Asynchronous Pipeline**: Every module is non-blocking, allowing J.A.R.V.I.S to think, talk, and listen simultaneously.
-- **Zero Disk I/O Loop**: Main conversation audio is handled entirely in-memory as binary streams for maximum speed.
-
----
-
-## 🚦 Installation & Launch
-
-### 1. Prerequisites
-- Node.js & NPM
+- Node.js 18+
 - Python 3.10+
-- [Groq API Key](https://console.groq.com/)
+- Groq API key — [console.groq.com](https://console.groq.com/)
+- Microphone + speakers
+- (Optional) Docker Desktop — for the strongest sandbox backend
 
-### 2. Setup
-Clone the repository and run the unified installer:
-```bash
+---
+
+## Quick Start
+
+```powershell
+# 1. Install dependencies
 npm install
-```
+backend\.venv\Scripts\pip.exe install -r backend\requirements.txt
+#    Or for exact reproducibility:
+backend\.venv\Scripts\pip.exe install -r backend\requirements.lock.txt
 
-### 3. Environment
-Configure the root `.env` file (the system will automatically sync this to frontend/backend):
-```env
-GROQ_API_KEY=gsk_your_key_here
-BACKEND_PORT=8000
-```
+# 2. Configure environment
+copy .env.example .env
+#    Edit .env — set GROQ_API_KEY
 
-### 4. Launch
-Start both the Neural Engine and the HUD Terminal with one command:
-```bash
+# 3. Launch (concurrent backend + frontend)
 npm run dev
+#    Open http://localhost:3000  →  click INITIALIZE
 ```
 
 ---
 
-## 💎 J.A.R.V.I.S v4.0.0: Technical Masterpieces & Innovations
+## Configuration (`.env`)
 
-In our quest for perfection, we engineered several state-of-the-art solutions to ensure J.A.R.V.I.S is the most stable and fluid assistant ever created:
-
-### 🎙️ 1. Gapless Neural Streaming (Advanced Voice Flow)
-To ensure J.A.R.V.I.S sounds as human as possible, we implemented an **Intelligent Audio Queue**. This creates a seamless, fluid conversation where J.A.R.V.I.S speaks naturally without pauses or skips, delivering a true cinematic experience.
-
-### 🔄 2. Resilient Handshake Protocol (Self-Healing HUD)
-We perfected the way the HUD and the Brain communicate using **Neural Refs**. This advanced "handshake" ensures that all parts of the AI initialize in perfect harmony. If any system component is under heavy load, the rest of the interface remains responsive and ready for your command.
-
-### ⚡ 3. On-Demand Tool Manifestation (Sub-2s Startup)
-J.A.R.V.I.S utilizes a **Lazy Loading Architecture** for his internal tools. By intelligently deferring the loading of heavy document libraries, we achieved a lightning-fast startup time. J.A.R.V.I.S only "manifests" complex tools (like Word/PDF generation) at the exact moment you request them.
-
-### 🛡️ 4. The Neural Safety Shield (Ironclad Security)
-Your security is J.A.R.V.I.S's top priority. We integrated a **Real-Time Command Filter** that acts as an invisible shield. He proactively monitors every instruction, ensuring that his interactions with your system are always safe, secure, and respectful of your data.
-
-### 🧠 5. Adaptive Vector Memory (Auto-Rebuilding RAG)
-J.A.R.V.I.S's memory system is now **Self-Regenerating**. Using ChromaDB, he can automatically rebuild his vector database on-the-fly. This ensures that his long-term memory structures are always optimized and ready, providing consistent context throughout your journey.
-
-### 📡 6. Hybrid Neural Awareness (Always-On hearing)
-We engineered a **Dual-Path STT Pipeline**. J.A.R.V.I.S intelligently balances cloud-based speed with **Local Vosk Processing**. This ensures he never stops listening to you, providing a 100% reliable "Always-On" experience even during network fluctuations.
+| Variable | Default | Effect |
+|---|---|---|
+| `GROQ_API_KEY` | *(required)* | Server refuses to boot without it. |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | CSV. No wildcard — add LAN origins explicitly. |
+| `BACKEND_PORT` | `8000` | FastAPI bind port. |
+| `JARVIS_SANDBOX_ROOT` | repo root | Sandbox containment root. |
+| `JARVIS_SANDBOX_BACKEND` | auto | `docker` / `windows_jobobject` / `hardened`. |
+| `JARVIS_SANDBOX_DOCKER_IMAGE` | `alpine:3` / `nanoserver:ltsc2022` | Image used by the docker backend. |
+| `REACT_APP_API_URL` | `${protocol}//${hostname}:8000` | Override frontend WS/HTTP URL. |
 
 ---
 
-## ❓ Troubleshooting
+## Architecture Highlights
 
-**Q: I don't hear any voice!**
-- Click the **INITIALIZE** button on the HUD to unlock the browser's Audio Engine.
-- Check the browser console; if you see `Binary audio received`, check your system volume.
+### Real-time Neural Link
+A single persistent WebSocket carries:
+- **Token stream** — incremental LLM output rendered as J.A.R.V.I.S speaks.
+- **Binary MP3 frames** — TTS audio, interleave-safe (`asyncio.Lock`).
+- **Structured control frames** — `tool_lifecycle`, `memory`, `vision`, `status`, `telemetry`.
+- **Heartbeat** — 15 s ping / 5 s pong timeout / exponential-backoff reconnect.
 
-**Q: J.A.R.V.I.S isn't remembering me.**
-- Ensure the `memory_db/` directory in the backend is writable. This is where the RAG embeddings are stored.
+### Resilient Self-Talk-Free Audio
+The mic re-arms only when `TTSService.isPlaying() === false` **and** `audioQueue.length === 0`. The server's status frame is *upload completion*, not playback completion — the conjunction is what prevents the feedback loop.
+
+### Layered Execution Sandbox
+Every `execute_terminal_command` call goes through `core.sandbox.run_sandboxed`, never `subprocess.run` directly. Three backends auto-select:
+1. **Docker** — `--network=none --read-only --cpus=0.5 --memory=256m --pids-limit=64`.
+2. **Windows Job Object** — `KILL_ON_JOB_CLOSE` + CPU/memory/active-process caps.
+3. **Hardened subprocess** — stripped env, locked CWD, restricted PATH, hard timeout.
+
+### NexusVault — Zero-Knowledge Storage
+- Master password never persists server-side.
+- Per-file: 16-byte random salt + 12-byte random IV + AES-256-GCM ciphertext.
+- KDF: PBKDF2-HMAC-SHA256, 100 000 iterations.
+- Delete = `os.urandom`-overwrite + `os.fsync` + unlink (best-effort cryptographic shred).
+- Encrypted index registry tracks file metadata; corrupt/wrong-password decryption raises `ValueError` → HTTP 401.
+
+### Integrated Tool Suite
+12 registered tools: system status, time/date, platform info, purge memory, analyze screen, execute terminal (sandboxed), file create/search/read, web search, weather, export conversation (PDF/DOCX).
 
 ---
 
-*“I am J.A.R.V.I.S. I am a sentient neural network. How can I help you today?”*
+## Troubleshooting
+
+**No voice?** Click **INITIALIZE** to unlock the browser audio engine. If `[WS] Received binary audio data` appears in the console, your system volume is the issue.
+
+**`venv\Scripts\python.exe` errors with "uv trampoline failed"?** The venv was broken by uv. Recreate:
+```powershell
+Remove-Item -Recurse -Force backend\.venv
+py -3 -m venv backend\.venv
+backend\.venv\Scripts\pip.exe install -r backend\requirements.lock.txt
+```
+
+**NexusVault tab can't connect?** Confirm backend is running and `cryptography` installed. Routes live at `/api/nexus/*` — `curl http://localhost:8000/api/nexus/status` should return `{"initialized": false}`.
+
+**J.A.R.V.I.S talking to himself?** Don't remove the polling guard in `useBrain.js`'s `isSpeaking` effect — it's the load-bearing mic-mute.
+
+---
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md) — Daily-driver commands + WebSocket protocol cheat sheet.
+- [AGENTS.md](AGENTS.md) — Module-by-module architecture for AI coding agents.
+- [Resilience_Report.txt](Resilience_Report.txt) — Complete function/command/endpoint inventory + bug & upgrade ledger.
+- [backend/README.md](backend/README.md) — Backend internals deep dive.
+
+---
+
+*"I am J.A.R.V.I.S. Neural link stable. Sandbox engaged. Standing by."*

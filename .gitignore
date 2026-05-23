@@ -50,6 +50,9 @@ backend/temp/
 backend/memory_db/
 backend/scratch/
 scratch/
+vault/                  # NexusVault encrypted blobs — never check in
+.sandbox_run/           # core.sandbox CWD per execution
+.ruff_cache/            # ruff incremental cache
 *.log
 *.bak
 

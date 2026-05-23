@@ -1,1 +1,4 @@
 - [AGENTS.md](AGENTS.md) — AI agent guide to codebase architecture, modules, conventions, and common tasks
+- [CLAUDE.md](CLAUDE.md) — daily-driver commands + WebSocket protocol cheat sheet (v3.2)
+- [Resilience_Report.txt](Resilience_Report.txt) — full function/command/endpoint inventory + bug/upgrade ledger
+- [Project_Report.md](Project_Report.md) — text companion to Project Report.pdf, captures everything since the May 2026 baseline

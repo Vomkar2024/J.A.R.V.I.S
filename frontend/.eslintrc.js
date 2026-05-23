@@ -2,8 +2,9 @@ module.exports = {
   extends: ['react-app'],
   rules: {
     'no-unused-vars': 'warn',
-    'react-hooks/exhaustive-deps': 'off',
+    // Re-enabled as a warning (was 'off' — hid a real missing-dep bug in App.js#handleInitialize).
+    'react-hooks/exhaustive-deps': 'warn',
     'no-console': 'off',
-    'jsx-a11y/anchor-is-valid': 'off'
-  }
+    'jsx-a11y/anchor-is-valid': 'off',
+  },
 };
