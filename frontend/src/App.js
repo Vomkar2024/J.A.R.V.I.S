@@ -62,7 +62,8 @@ function App() {
     conversationHistory,
     telemetry,
     sendMessage,
-    clearHistory
+    clearHistory,
+    forceReconnect
   } = useBrain();
 
   // --- Speech Hook ---
@@ -82,16 +83,16 @@ function App() {
   } = useSpeech(setTranscript, onFinalTranscript, isSpeaking);
 
   // --- System Initialization ---
-  
+
   // Load settings from persistent storage
   useEffect(() => {
     try {
       const saved = localStorage.getItem('blobSettings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        setBlobSettings(prev => ({ 
-          ...prev, 
-          ...parsed, 
+        setBlobSettings(prev => ({
+          ...prev,
+          ...parsed,
           isDraggable: false // Always start non-draggable for stability
         }));
       }
@@ -108,9 +109,26 @@ function App() {
     }
   }, [isLoading]);
 
+  // Wait for backend connection before showing main app
+  useEffect(() => {
+    if (isLoading && isBackendConnected) {
+      setIsLoading(false);
+    }
+  }, [isBackendConnected, isLoading]);
+
   // --- Interaction Handlers ---
-  
-  const handleSplashComplete = useCallback(() => setIsLoading(false), []);
+
+  // Safety timeout: if backend doesn't connect within reasonable time, proceed anyway
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('Backend connection timeout — showing app anyway');
+        setIsLoading(false);
+      }
+    }, 12000); // 12s max (splash 9.2s + fade 0.8s + 2s buffer)
+
+    return () => clearTimeout(safetyTimer);
+  }, [isLoading]);
 
   const handleInitialize = useCallback(async () => {
     try {
@@ -120,6 +138,7 @@ function App() {
       
       const success = await startSpeech();
       if (success) {
+        forceReconnect();
         setAlert({ message: ALERTS.LINK_ESTABLISHED, isVisible: true });
         
         // CINEMATIC SEQUENCE: Expand HUD and trigger greeting
@@ -182,7 +201,7 @@ function App() {
 
   return (
     <>
-      {isLoading && <SplashScreen onComplete={handleSplashComplete} />}
+      {isLoading && <SplashScreen />}
       
       <div 
         className={`app-container ${isLoading ? 'hidden' : ''}`} 

@@ -336,8 +336,15 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
 
   // Initialize Speech Recognition
   useEffect(() => {
+    const isSecure = window.isSecureContext !== false;
+    if (!isSecure) {
+      console.warn('[Neural] ⚠️ Warning: App is running in an insecure context. Microphone API (getUserMedia) might be disabled by the browser.');
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    
+    if (SpeechRecognition && hasMediaDevices) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
@@ -346,6 +353,7 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
       attachRecognitionHandlers(recognition);
       recognitionRef.current = recognition;
     } else {
+      console.warn('[Neural] ⚠️ Speech recognition or mediaDevices not fully supported in this context.');
       setIsSupported(false);
     }
   }, [attachRecognitionHandlers]);
@@ -361,6 +369,9 @@ export const useSpeech = (onTranscriptChange, onFinalTranscript, isSpeaking = fa
    */
   const startSpeech = useCallback(async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Microphone API (getUserMedia) is not supported on this browser or connection is insecure. Chrome/Firefox/Safari restrict audio capture to secure contexts (localhost or HTTPS).");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setPermissionGranted(true);
       streamRef.current = stream;

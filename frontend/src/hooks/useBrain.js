@@ -1,8 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import TTSService from '../services/TTSService';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const WS_URL = API_URL.replace('http', 'ws') + '/ws';
+// Dynamic host resolution to support local network devices and alternate hostnames
+const getApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/+$/, '');
+  }
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname || 'localhost';
+  return `${protocol}//${hostname}:8000`;
+};
+const API_URL = getApiUrl();
+const WS_URL = `${API_URL.replace(/^http/, 'ws')}/ws`;
 
 // ============================================================
 // Connection Constants — Tuned for Maximum Resilience
@@ -216,13 +225,10 @@ export const useBrain = () => {
           
           try {
             await TTSService.playAudio(audioBlob);
-            console.log('[WS] Audio playback finished');
+            console.log('[WS] Audio chunk queued for playback');
           } catch (err) {
             console.error('[WS] Audio playback error:', err);
           }
-          
-          setIsSpeaking(false);
-          setPipelineState('idle');
           return;
         }
 
@@ -330,7 +336,7 @@ export const useBrain = () => {
         console.warn('[WS] ⚠️ Connection error');
         connectingRef.current = false;
         setIsBackendConnected(false);
-        // onclose will fire after onerror, which will trigger reconnect
+        // onclose will fire after onerror, which will trigger reconnect if needed
       };
 
       wsRef.current = ws;
@@ -560,6 +566,17 @@ export const useBrain = () => {
     setStreamingText('');
   }, []);
 
+  const forceReconnect = useCallback(() => {
+    reconnectAttemptRef.current = 0;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+    }
+  }, [connectWebSocket]);
+
   // When we get a final response, add it to conversation history
   useEffect(() => {
     if (aiResponse) {
@@ -567,6 +584,21 @@ export const useBrain = () => {
       setConversationHistory(prev => [...prev, aiMsg]);
     }
   }, [aiResponse]);
+
+  // Reactive audio playback monitor — unblocks mic only when J.A.R.V.I.S actually finishes speaking
+  useEffect(() => {
+    if (!isSpeaking) return;
+
+    const interval = setInterval(() => {
+      if (!TTSService.isPlaying() && TTSService.audioQueue.length === 0) {
+        setIsSpeaking(false);
+        setPipelineState('idle');
+        clearInterval(interval);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isSpeaking]);
 
   return {
     aiResponse,
@@ -580,6 +612,7 @@ export const useBrain = () => {
     systemLogs,
     telemetry,
     sendMessage,
-    clearHistory
+    clearHistory,
+    forceReconnect
   };
 };
