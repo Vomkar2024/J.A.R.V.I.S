@@ -59,7 +59,7 @@ const TTSService = {
 
       if (preferredVoice) utterance.voice = preferredVoice;
       utterance.pitch = 1.0;
-      utterance.rate = 1.05; 
+      utterance.rate = 1.20; 
       utterance.volume = 1.0;
       window.speechSynthesis.speak(utterance);
     };
@@ -110,24 +110,28 @@ const TTSService = {
       const ctx = this.getAudioContext();
       const arrayBuffer = await blob.arrayBuffer();
       
-      // Attempt to decode binary MP3 chunk
-      ctx.decodeAudioData(arrayBuffer, (audioBuffer) => {
-        sourceNode = ctx.createBufferSource();
-        sourceNode.buffer = audioBuffer;
-        sourceNode.connect(analyser);
-        
-        sourceNode.onended = () => {
-          sourceNode = null;
-          this.processQueue();
-        };
-        
-        sourceNode.start(0);
-      }, (error) => {
-        console.error('[TTSService] Chunk decoding failed, falling back to Web Speech:', error);
-        // Fallback: try to find the text if this was a text-based blob (unlikely for binary, but good for safety)
-        // More realistically, we just skip this chunk or log it.
+      // Attempt to decode binary MP3 chunk using the modern Promise-based API.
+      // Wrap in try/catch to handle partial/corrupt stream chunks gracefully.
+      let audioBuffer;
+      try {
+        audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      } catch (decodeError) {
+        console.warn('[TTSService] Chunk decoding failed (corrupt or partial stream):', decodeError);
+        // Skip this chunk and process the next one to keep the feedback loop active
         this.processQueue();
-      });
+        return;
+      }
+
+      sourceNode = ctx.createBufferSource();
+      sourceNode.buffer = audioBuffer;
+      sourceNode.connect(analyser);
+      
+      sourceNode.onended = () => {
+        sourceNode = null;
+        this.processQueue();
+      };
+      
+      sourceNode.start(0);
     } catch (error) {
       console.error('[TTSService] Queue processing fatal error:', error);
       this.processQueue();

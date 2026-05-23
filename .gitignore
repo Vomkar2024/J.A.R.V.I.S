@@ -51,6 +51,7 @@ backend/memory_db/
 backend/scratch/
 scratch/
 *.log
+*.bak
 
 # IDE / OS
 .vscode/*

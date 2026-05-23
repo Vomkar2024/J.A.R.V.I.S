@@ -6,11 +6,11 @@ import './css/TranslationTerminal.css';
  * This component appears on the right side of the screen when a non-English
  * language is detected. It shows the original text and its English translation.
  */
-const TranslationTerminal = ({ translationData, isVisible }) => {
+const TranslationTerminal = ({ translationData, isVisible, isHighlighted }) => {
   if (!isVisible || !translationData) return null;
 
   return (
-    <div className="translation-terminal">
+    <div className={`translation-terminal ${isHighlighted ? 'tab-highlight-active-nexus' : ''}`}>
       <div className="terminal-header">
         <div className="terminal-header-top">
           <span className="terminal-title">Neural Translator</span>
@@ -56,7 +56,7 @@ const TranslationTerminal = ({ translationData, isVisible }) => {
 
       <div className="terminal-footer">
         <div className="scanning-line"></div>
-        <span className="footer-code">J.A.R.V.I.S_V3.0_TL88</span>
+        <span className="footer-code">J.A.R.V.I.S_V4.0_TL88</span>
       </div>
     </div>
   );

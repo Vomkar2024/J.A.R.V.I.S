@@ -3,6 +3,34 @@ import './css/BrainTerminal.css';
 import { STATUS_LABELS } from '../constants';
 
 /**
+ * Utility to parse URLs and render them as clickable anchor tags.
+ */
+const renderMessageWithLinks = (text) => {
+  if (!text) return '';
+  // Match standard URLs (http/https) or www. links
+  const urlRegex = /(https?:\/\/[^\s\+]+|www\.[^\s\+]+)/g;
+  const parts = text.split(urlRegex);
+  
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      const href = part.startsWith('http') ? part : `https://${part}`;
+      return (
+        <a 
+          key={i} 
+          href={href} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="terminal-link"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
+/**
  * BrainTerminal Component
  * The advanced communication hub for J.A.R.V.I.S.
  * Displays real-time streaming AI responses and conversation history.
@@ -47,27 +75,27 @@ const BrainTerminal = ({ streamingText, aiResponse, isThinking, conversationHist
       </div>
 
       <div className="terminal-body" ref={scrollRef}>
-        {/* Dynamic Interaction Only (No Persistent History) */}
-        {conversationHistory.length > 0 && !streamingText && !isThinking && (
-          <div className={`message-segment ${conversationHistory[conversationHistory.length-1].role}`}>
+        {/* Full Scrollable Conversation History */}
+        {conversationHistory.map((msg, index) => (
+          <div key={index} className={`message-segment ${msg.role}`}>
             <div className="segment-label">
-              {conversationHistory[conversationHistory.length-1].role === 'user' ? '⟩ USER_INPUT' : '⟩ JARVIS_RESPONSE'}
+              {msg.role === 'user' ? '⟩ USER_INPUT' : '⟩ JARVIS_RESPONSE'}
               <span className="timestamp">
-                {new Date(conversationHistory[conversationHistory.length-1].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
+                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : ''}
               </span>
             </div>
-            <p className={`message-text ${conversationHistory[conversationHistory.length-1].role}`}>
-              {conversationHistory[conversationHistory.length-1].text}
+            <p className={`message-text ${msg.role}`}>
+              {renderMessageWithLinks(msg.text)}
             </p>
           </div>
-        )}
+        ))}
 
         {/* Streaming Text (real-time tokens) */}
         {streamingText && (
           <div className="message-segment assistant streaming">
             <div className="segment-label">⟩ JARVIS_RESPONSE <span className="live-badge">LIVE</span></div>
             <p className="message-text assistant">
-              {streamingText}
+              {renderMessageWithLinks(streamingText)}
               <span className="cursor-blink">▊</span>
             </p>
           </div>

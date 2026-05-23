@@ -14,7 +14,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "set NODE_OPTIONS=--no-deprecation && react-scripts start",
+    "start": "node start-backend.js",
+    "react-start": "set NODE_OPTIONS=--no-deprecation && react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

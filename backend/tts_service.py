@@ -7,7 +7,7 @@ import base64
 VOICE = "en-GB-RyanNeural"
 
 async def generate_tts_streaming(text):
-    communicate = edge_tts.Communicate(text,VOICE)
+    communicate = edge_tts.Communicate(text, VOICE, rate="+18%")
 
     #Stream audio chunks
     async for chunk in communicate.stream():
@@ -18,7 +18,7 @@ async def generate_tts_streaming(text):
 
 async def generate_tts_file(text):
     output_file = "output.mp3"
-    communicate = edge_tts.Communicate(text,VOICE)
+    communicate = edge_tts.Communicate(text, VOICE, rate="+18%")
     await communicate.save(output_file)
     print(f"TTS_Saved: {os.path.abspath(output_file)}")
     sys.stdout.flush()

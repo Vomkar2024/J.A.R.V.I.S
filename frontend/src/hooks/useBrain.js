@@ -59,6 +59,7 @@ export const useBrain = () => {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [systemLogs, setSystemLogs] = useState([]);
   const [telemetry, setTelemetry] = useState({ cpu: 0, ram: 0, status: 'nominal' });
+  const [translationData, setTranslationData] = useState(null);
 
   // --- Refs ---
   const wsRef = useRef(null);
@@ -73,6 +74,8 @@ export const useBrain = () => {
   const isIntentionalCloseRef = useRef(false);
   const connectingRef = useRef(false);
   const mountedRef = useRef(true);
+  const audioChunksRef = useRef([]);
+  const isDownloadingAudioRef = useRef(false);
 
   // Helper to add system logs
   const addLog = useCallback((message, type = 'info') => {
@@ -214,21 +217,18 @@ export const useBrain = () => {
           setIsSpeaking(true);
           setPipelineState('speaking');
           
-          let audioBlob;
+          let chunkData;
           if (event.data instanceof Blob) {
-            audioBlob = new Blob([event.data], { type: 'audio/mpeg' });
+            chunkData = event.data;
           } else {
-            audioBlob = new Blob([event.data], { type: 'audio/mpeg' });
+            chunkData = new Blob([event.data], { type: 'audio/mpeg' });
           }
           
-          console.log('[WS] Prepared audio blob, size:', audioBlob.size, 'type:', audioBlob.type);
-          
-          try {
-            await TTSService.playAudio(audioBlob);
-            console.log('[WS] Audio chunk queued for playback');
-          } catch (err) {
-            console.error('[WS] Audio playback error:', err);
-          }
+          // Accumulate raw MP3 streaming chunks instead of playing immediately.
+          // This allows the browser to decode a single, complete MP3 buffer at the end of the streaming session,
+          // completely eliminating clicks, voice cracking, and decoding failures.
+          audioChunksRef.current.push(chunkData);
+          console.log(`[WS] Cached audio chunk (Total stored: ${audioChunksRef.current.length})`);
           return;
         }
 
@@ -264,7 +264,20 @@ export const useBrain = () => {
                 setIsThinking(false);
                 setPipelineState('speaking');
               } else if (message.data === 'idle') {
-                setPipelineState('idle');
+                // Audio streaming is done!
+                isDownloadingAudioRef.current = false;
+                if (audioChunksRef.current.length > 0) {
+                  console.log(`[WS] Consolidating and playing ${audioChunksRef.current.length} cached audio chunks...`);
+                  const finalBlob = new Blob(audioChunksRef.current, { type: 'audio/mpeg' });
+                  audioChunksRef.current = [];
+                  try {
+                    await TTSService.playAudio(finalBlob);
+                  } catch (err) {
+                    console.error('[WS] Combined audio playback failed:', err);
+                  }
+                } else {
+                  setPipelineState('idle');
+                }
               } else if (message.data === 'observing') {
                 setPipelineState('observing');
               } else if (message.data === 'history_cleared') {
@@ -288,16 +301,29 @@ export const useBrain = () => {
               break;
 
             case 'audio_start':
-              // Audio binary will follow
+              // Reset the binary chunks accumulator and download status flag
+              audioChunksRef.current = [];
+              isDownloadingAudioRef.current = true;
+              setIsSpeaking(true);
+              setPipelineState('speaking');
               break;
             
             case 'telemetry':
               setTelemetry(message.data);
               break;
 
+            case 'translation':
+              setTranslationData(message.data);
+              if (message.data) {
+                addLog(`Detected: ${message.data.detectedLang} | Translated to: ${message.data.translatedText}`, 'info');
+              }
+              break;
+
             case 'error':
               console.error('[WS] Server error:', message.data);
               setIsThinking(false);
+              isDownloadingAudioRef.current = false;
+              audioChunksRef.current = [];
               setPipelineState('idle');
               break;
 
@@ -322,6 +348,10 @@ export const useBrain = () => {
         setIsBackendConnected(false);
         wsRef.current = null;
         
+        // Reset audio state
+        isDownloadingAudioRef.current = false;
+        audioChunksRef.current = [];
+        
         // Stop heartbeat
         clearHeartbeat();
 
@@ -336,6 +366,10 @@ export const useBrain = () => {
         console.warn('[WS] ⚠️ Connection error');
         connectingRef.current = false;
         setIsBackendConnected(false);
+        
+        // Reset audio state
+        isDownloadingAudioRef.current = false;
+        audioChunksRef.current = [];
         // onclose will fire after onerror, which will trigger reconnect if needed
       };
 
@@ -516,8 +550,10 @@ export const useBrain = () => {
   const sendMessage = useCallback((text) => {
     if (!text || text.trim().length < 2) return;
 
-    // Stop any currently playing audio
+    // Stop any currently playing audio and clear chunk buffers
     TTSService.stop();
+    audioChunksRef.current = [];
+    isDownloadingAudioRef.current = false;
 
     // Add user message to conversation immediately (optimistic)
     const userMsg = { role: 'user', text: text.trim(), timestamp: Date.now() };
@@ -590,7 +626,7 @@ export const useBrain = () => {
     if (!isSpeaking) return;
 
     const interval = setInterval(() => {
-      if (!TTSService.isPlaying() && TTSService.audioQueue.length === 0) {
+      if (!isDownloadingAudioRef.current && !TTSService.isPlaying() && TTSService.audioQueue.length === 0) {
         setIsSpeaking(false);
         setPipelineState('idle');
         clearInterval(interval);
@@ -611,6 +647,7 @@ export const useBrain = () => {
     conversationHistory,
     systemLogs,
     telemetry,
+    translationData,
     sendMessage,
     clearHistory,
     forceReconnect
