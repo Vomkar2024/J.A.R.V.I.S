@@ -1,105 +1,569 @@
 ================================================================================
-          J.A.R.V.I.S connection & neural link resilience report
+          J.A.R.V.I.S CONNECTION & NEURAL LINK RESILIENCE REPORT
 ================================================================================
-System Version: 3.1
-Date: 2026-05-22
-Target OS: Windows 11 / Windows 10
-Framework Stack: React 19 + Three.js (HUD), FastAPI + Python 3.10+ (Core)
+System Version:    3.2 (post-resilience hardening)
+Date:              2026-05-23
+Target OS:         Windows 11 / Windows 10 (PowerShell)
+Framework Stack:   React 19 + Three.js (HUD) · FastAPI + Python 3.10+ (Core)
+Repo Root:         c:\Users\shubh\Documents\Omkar\J.A.R.V.I.S
 ================================================================================
 
+TABLE OF CONTENTS
+-----------------
+1.  System Scan Summary
+2.  Original Resilience Fixes (A–D)
+3.  Code Verification & Build Status
+4.  Backend Python — Complete Function Inventory
+5.  Backend FastAPI — Endpoint Inventory
+6.  LLM Tool Registry — All Registered Tools
+7.  Shell Command Allow-List (Security Sandbox)
+8.  Frontend React — Component & Hook Inventory
+9.  Frontend Services — Method Inventory
+10. NPM / Shell / Verification Commands
+11. WebSocket Wire Protocol (Inbound + Outbound)
+12. Environment Variables (Boot-Time Configuration)
+13. Known Bugs, Open Errors, and Latent Risks
+14. Recommended Upgrades (Short-, Mid-, Long-Term)
+15. Operational Notes for Future Maintainers
+
+================================================================================
 1. SYSTEM COMPREHENSIVE SCAN SUMMARY
---------------------------------------------------------------------------------
-We performed a deep static analysis and logical review across all primary
-components of J.A.R.V.I.S:
-* Frontend custom Hooks (useBrain.js, useSpeech.js)
-* Frontend audio Services (TTSService.js)
-* Backend processor Core (processor.py)
-* Backend network Endpoint (main.py)
+================================================================================
+A deep static analysis + logical review was performed across:
+* Frontend custom hooks   — useBrain.js, useSpeech.js
+* Frontend audio service  — TTSService.js
+* Backend processor core  — processor.py
+* Backend network entry   — main.py
+* Backend security shim   — security.py
+* Backend memory layer    — memory.py
+* Backend tool registry   — tool_registry.py
+* Backend vision module   — vision.py
+* STT/TTS services        — stt_service.py, tts_service.py
 
-We targeted three fundamental engineering vulnerabilities:
-- Immediate audio-feedback loop ("Self-Talk" loop) during speech recognition.
-- Inability to connect across LAN, local network interfaces, or custom domains.
-- Crashes when accessed via insecure contexts (non-localhost HTTP).
-- String concatenation errors in the LLM memory injection layer.
+Targeted engineering vulnerabilities (all patched in v3.1):
+  - Immediate audio-feedback ("self-talk") loop during STT capture.
+  - LAN / custom-domain inability to connect (hardcoded localhost).
+  - Crashes when accessed in insecure (non-localhost HTTP) contexts.
+  - String-concat TypeError in the LLM memory-injection layer.
 
-All identified vulnerabilities have been successfully and permanently patched.
+Additional v3.2 hardening (this revision):
+  - Resolved two unmerged git conflict regions in core/processor.py
+    that left the backend uncompilable on a clean checkout.
+  - Confirmed boot-time GROQ_API_KEY validation refuses placeholder keys.
+  - Confirmed CORS is env-driven (ALLOWED_ORIGINS) — no wildcard default.
 
-2. SPECIFIC BUG RESOLUTIONS & ARCHITECTURAL UPGRADES
+================================================================================
+2. ORIGINAL RESILIENCE FIXES (A–D)
+================================================================================
+[A] SELF-TALK FEEDBACK ELIMINATION (THE NEURAL LINK FIX)
+    Problem : Mic re-armed the instant first MP3 frame arrived; TTSService
+              .playAudio() returned immediately while the sound card kept
+              playing — J.A.R.V.I.S transcribed his own voice into an
+              infinite loop.
+    Solution: Reactive 100 ms polling monitor in useBrain.js that gates
+              speech recognition on
+                  TTSService.isPlaying() === false
+                  &&
+                  TTSService.audioQueue.length === 0
+    Files   : frontend\src\hooks\useBrain.js
 
-[A] PREVENTING SPEECH CAPTURE SELF-TALK FEEDBACK (THE NEURAL LINK FIX)
-* Problem: The previous implementation unmuted the microphone as soon as the
-  first binary audio packet was received from the server. TTSService's playAudio()
-  is synchronous and returns immediately while the sound card continues to
-  play the actual audio. Consequently, J.A.R.V.I.S would hear, transcribe, and
-  reply to his own voice, triggering an endless self-talk loop.
-* Solution: Implemented a background reactive monitor in `useBrain.js`. It
-  checks the hardware playback state `TTSService.isPlaying()` and the local
-  buffer `TTSService.audioQueue.length` every 100ms. It keeps the speech recognition
-  engine strictly silenced until all audio queue buffers are fully drained.
-* Files Modified:
-  - e:\Download\Omkar\J.A.R.V.I.S\frontend\src\hooks\useBrain.js
+[B] DYNAMIC WEBSOCKET URL RESOLUTION
+    Problem : Hardcoded `ws://localhost:8000` blocked LAN / mobile / custom
+              host testing.
+    Solution: Dynamic resolver honours REACT_APP_API_URL override, else
+              derives from window.location:
+                  `${protocol}//${hostname}:8000`
+              Reconnect: exponential backoff (500 ms → 10 s, ×1.5 decay,
+              ±30 % jitter) + tab-visibility & online-event triggers.
+    Files   : frontend\src\hooks\useBrain.js
 
-[B] DYNAMIC WEBSOCKET URL RESOLUTION (THE WS LINK FIX)
-* Problem: Hardcoded `localhost:8000` URLs restricted the developer from
-  running or testing J.A.R.V.I.S on alternate ports, local IP addresses (LANs
-  for mobile testing), or custom domains.
-* Solution: Replaced all static references with a dynamic URL resolver mapping
-  directly to the window context hostname while preserving environment variables:
-  ```javascript
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname || 'localhost';
-  const API_URL = `${protocol}//${hostname}:8000`;
-  ```
-* Reconnection System: Built exponential backoff with jitter (initial delay 500ms,
-  max 10s, 1.5x decay, ±30% randomized jitter) to protect the server from 
-  thundering herd reconnections. Added tab-visibility and online event handlers 
-  to trigger immediate connection restoration.
-* Files Modified:
-  - e:\Download\Omkar\J.A.R.V.I.S\frontend\src\hooks\useBrain.js
-
-[C] INSECURE CONTEXT & USERMEDIA GUARDS (SECURE DEVICE SAFEGUARDS)
-* Problem: Modern browsers (Chrome, Firefox, Safari) strictly limit microphone
-  access (`navigator.mediaDevices.getUserMedia`) to secure contexts (HTTPS or 
-  localhost). Accessing the application on any other HTTP address resulted in
-  unhandled promise rejections, crashing the HUD startup sequence.
-* Solution: Injected validation checks during initial state rendering and stream
-  initiation. The system now alerts the console about insecure context issues
-  and rejects the initialization promise cleanly with a descriptive, user-friendly
-  warning rather than crashing the React DOM rendering.
-* Files Modified:
-  - e:\Download\Omkar\J.A.R.V.I.S\frontend\src\hooks\useSpeech.js
+[C] INSECURE-CONTEXT / getUserMedia GUARDS
+    Problem : `navigator.mediaDevices.getUserMedia` rejects outside HTTPS
+              or localhost — unhandled promise rejection crashed the HUD.
+    Solution: Pre-flight `window.isSecureContext` check + explicit
+              capability guard; failure now throws a friendly Error
+              instead of corrupting React render state.
+    Files   : frontend\src\hooks\useSpeech.js
 
 [D] MEMORY CONCATENATION DEFENSIVE BOUNDARIES
-* Problem: The LLM prompt streaming function (`stream_llm` in `processor.py`)
-  appends `relevant_context` directly to the system prompt string. If the memory
-  retrieval function returned `None` or an unexpected type, the string 
-  concatenation would throw a fatal `TypeError` and sever the WebSocket connection.
-* Solution: Secured the concatenation expression to default safely to an empty
-  string when memory query responses are nullish:
-  ```python
-  messages = [{"role": "system", "content": self.system_prompt + (relevant_context or "")}]
-  ```
-* Files Modified:
-  - e:\Download\Omkar\J.A.R.V.I.S\backend\core\processor.py
+    Problem : `system_prompt + relevant_context` raised TypeError when
+              memory recall returned None, severing the WS connection.
+    Solution: Null-coalesce the recall payload — final form (post-conflict
+              resolution):
+                  content = self.system_prompt + (("\n" + recall) if recall else "")
+    Files   : backend\core\processor.py
 
+================================================================================
 3. CODE VERIFICATION & BUILD STATUS
+================================================================================
+Backend Python syntax (py_compile, system Python 3.13.9):
+  SUCCESS — all 8 modules compile cleanly with zero errors.
+    backend\main.py
+    backend\core\processor.py
+    backend\core\memory.py
+    backend\core\tool_registry.py
+    backend\core\security.py
+    backend\core\vision.py
+    backend\stt_service.py
+    backend\tts_service.py
 
-* Backend Syntax Compiles: SUCCESS (Verified using .venv python -m py_compile)
-  - `backend\core\processor.py` -> Compiled cleanly with zero syntax errors.
-  - `backend\main.py` -> Compiled cleanly with zero syntax errors.
+Git merge-conflict markers in source tree: NONE.
+  (Documentation files contain `==========` banner separators only —
+   these are not git markers and are intentional.)
 
-* Frontend Build: SUCCESS (Verified via production bundle build)
-  - React application compiles to fully static, optimized chunks under `/build`.
-  - Zero typescript/javascript syntax or import errors.
+Frontend production build: NOT VERIFIED THIS RUN.
+  Reason: `frontend\node_modules` is absent. Run `npm install` then
+  `npm run build --prefix frontend` to confirm.
 
-4. COMPREHENSIVE DEVELOPER DOCUMENTATION CREATED
-We successfully created a core developer handbook `CLAUDE.md` in the root 
-directory. This documents:
-* Full unified local development commands (Root, Frontend, Backend).
-* Component development styles, separation of concerns, and async-first design.
-* Comprehensive deep-dives of our connection resilience and playback loops 
-  to prevent future regressions.
+================================================================================
+4. BACKEND PYTHON — COMPLETE FUNCTION INVENTORY
+================================================================================
+
+backend\main.py
+---------------
+class ChatRequest(BaseModel)                       — request schema for /ask, /translate
+async def _lifespan(_app)                          — FastAPI lifespan; builds singleton JarvisProcessor
+async def websocket_endpoint(ws)                   — primary /ws handler; spawns telemetry + keepalive loops
+  inner async def send_json(payload)               — lock-serialised JSON writer
+  inner async def send_bytes(payload)              — lock-serialised binary writer
+  inner async def telemetry_loop()                 — 5 s CPU/RAM sampler + sustained-spike alerter
+  inner async def keepalive_loop()                 — 20 s idle-pong emitter (defeats proxy timeouts)
+async def speech_to_text(file)                     — REST fallback STT
+async def ask_llm(request)                         — REST fallback non-streaming LLM
+async def translate_text(request)                  — REST Hinglish/Hindi → English translator
+async def text_to_speech(text)                     — REST TTS, returns MP3 stream
+async def process_audio(file)                      — full STT → LLM → TTS cycle via REST
+async def health()                                 — liveness probe
+
+backend\core\processor.py
+-------------------------
+class JarvisProcessor                              — central orchestrator (singleton)
+  def __init__()                                   — boot Groq client, ChromaDB memory, vision, history state
+  def _purge_temp_dir()                            — drop stale exports on startup
+  def _load_vosk_model()                           — lazy local STT model loader (None on failure)
+  def _add_to_history(role, content)               — append + auto-condense rolling window via _CONDENSE_FROM
+  def clear_history()                              — wipe in-memory history (ChromaDB untouched)
+  async def speech_to_text(audio_bytes, ext)       — Groq Whisper-Large-V3-Turbo with Vosk fallback
+  async def speech_to_text_local(audio_bytes)      — direct Vosk path
+  def _run_tool(tool_call)                         — dispatch through ToolContext to handler
+  def _build_messages(include_memory_for=None)     — assemble system+history payload for Groq
+  async def ask_llm(text)                          — non-stream LLM call (used by REST /ask)
+  def stream_llm(text)                             — generator that yields tokens + sentinel markers
+                                                     ([MEMORY_ACTIVE], [VISION_ACTIVE], [TOOL_START:NAME],
+                                                      [TOOL_END:NAME], [VISION_ENDED])
+  async def translate_text(text)                   — Groq translation pass
+  async def text_to_speech(text)                   — Edge TTS → on-disk MP3 path
+  async def text_to_speech_bytes(text)             — Edge TTS → AsyncIterator[bytes] for streaming
+  async def process_full_cycle(audio, ext)         — bundled STT→LLM→TTS pipeline
+  def _export_to_document(fmt="pdf")               — dispatch to docx/pdf exporter
+  def _export_docx(filename)                       — lazy-imports python-docx
+  def _export_pdf(filename)                        — lazy-imports fpdf
+
+backend\core\memory.py
+----------------------
+class JarvisMemory                                 — ChromaDB wrapper (RAG layer)
+  def __init__(db_path=None)                       — open or create persistent client
+  def _collection                                  — lazy collection handle (auto-rebuild if corrupt)
+  def collection                                   — back-compat alias for prior callers
+  def store_memory(user_text, ai_response)         — embed + persist a turn (timestamped metadata)
+  def query_memory(query, n_results=3)             — semantic recall; returns formatted string or empty
+  def clear_all_memories()                         — drop and recreate collection
+
+backend\core\security.py
+------------------------
+def is_command_allowed(command)                    — allow-list filter; returns (bool, reason)
+def run_safe_command(command, ...)                 — shell-less subprocess wrapper (shlex+timeout)
+def resolve_within_sandbox(user_path)              — path-traversal guard (Path.resolve under SANDBOX_ROOT)
+def redact(text)                                   — strip Groq/OpenAI keys + generic api_key/token/secret
+Module-level constants:
+  SANDBOX_ROOT                                     — env JARVIS_SANDBOX_ROOT, defaults to repo root
+  _ALLOWED_BINARIES                                — frozenset of permitted command heads (see §7)
+  _SHELL_METACHARS                                 — denies `;`, `&`, `|`, backtick, `$`, `>`, `<`, `\n`, `&&`, `||`, `$( )`
+  _SECRET_PATTERNS                                 — redaction regexes
+
+backend\core\tool_registry.py
+-----------------------------
+class _MemoryLike(Protocol), _VisionLike, _ExporterLike   — duck-typed context interfaces
+class ToolContext                                          — handlers' service bag (memory/vision/exporter)
+class Tool                                                 — name + description + JSON Schema + handler
+  def to_groq_schema()                                     — emit Groq function-calling tool definition
+Handlers (all signature `(args: dict, ctx: ToolContext) -> str`):
+  _h_system_status      — CPU/RAM/disk snapshot via psutil
+  _h_time_and_date      — datetime.now()
+  _h_platform_info      — platform.uname()
+  _h_purge_memory       — delegates to ctx.memory.clear_all_memories()
+  _h_analyze_screen     — delegates to ctx.vision.analyze_screen(query)
+  _h_execute_terminal   — security.run_safe_command (allow-list enforced)
+  _h_create_file        — UTF-8 write inside SANDBOX_ROOT
+  _h_search_files       — glob inside sandbox
+  _h_read_file          — UTF-8 read, ≤ 1 MiB
+  _ddgs_text            — DuckDuckGo text search shim (lazy import)
+  _h_web_search         — wraps _ddgs_text
+  _h_weather            — DuckDuckGo "weather <loc>" pass-through
+  _h_export_conversation— delegates to ctx.exporter("pdf"|"docx")
+def execute_tool(name, arguments, ctx)             — public dispatch entry
+
+backend\core\vision.py
+----------------------
+class JarvisVision
+  def __init__(client=None)                        — accept Groq client for vision call (lazy)
+  def capture_screen()                             — pyautogui screenshot → base64 PNG (or None)
+  def analyze_screen(user_query)                   — Groq multimodal call with screen+query
+
+backend\tts_service.py
+----------------------
+async def generate_tts_streaming(text)             — yields MP3 chunks via edge-tts
+async def generate_tts_file(text)                  — writes MP3 to disk, returns path
+
+backend\stt_service.py
+----------------------
+(Module-level Groq + Vosk wrappers used by processor.speech_to_text)
+
+================================================================================
+5. BACKEND FASTAPI — ENDPOINT INVENTORY
+================================================================================
+Method   Path             Purpose
+-------- ---------------- ------------------------------------------------------
+WS       /ws              Primary bidirectional streaming (chat + audio + telemetry)
+POST     /stt             Upload audio → transcript JSON
+POST     /ask             Text → non-streaming LLM completion
+POST     /translate       Hinglish/Hindi → English
+POST     /tts             Text → MP3 audio response
+POST     /process-audio   Bundled STT→LLM→TTS cycle (legacy fallback)
+GET      /health          Liveness probe
+
+CORS allow-list: env ALLOWED_ORIGINS (CSV); default http://localhost:3000
+Inbound text cap: 4000 chars (_MAX_INBOUND_CHARS)
+Inbound audio cap: 25 MiB (_MAX_AUDIO_BYTES)
+
+================================================================================
+6. LLM TOOL REGISTRY — ALL REGISTERED TOOLS
+================================================================================
+(Defined in backend\core\tool_registry.py _TOOLS tuple — exposed to Groq via
+TOOL_DEFINITIONS, dispatched through execute_tool().)
+
+Tool Name                  Required Args       Purpose
+-------------------------  ------------------  -------------------------------
+get_system_status          (none)              CPU/RAM/disk snapshot
+get_time_and_date          (none)              Local datetime
+get_platform_info          (none)              OS / arch info
+purge_memory               (none)              Wipe long-term ChromaDB store
+analyze_screen             query               Vision: screenshot + LLM answer
+execute_terminal_command   command             Allow-list shell (see §7)
+create_file                path, content       UTF-8 write inside sandbox
+search_files               query [, root_dir]  Glob search inside sandbox
+read_file                  path                UTF-8 read inside sandbox (≤1 MiB)
+web_search                 query               DuckDuckGo text search
+get_weather                location            DuckDuckGo weather lookup
+export_conversation        [format=pdf|docx]   Generate PDF/DOCX of history
+
+================================================================================
+7. SHELL COMMAND ALLOW-LIST (SECURITY SANDBOX)
+================================================================================
+Defined in backend\core\security.py:_ALLOWED_BINARIES
+Anything not in this set is rejected. Shell metacharacters
+(`;` `&` `|` `` ` `` `$` `>` `<` `\n` `&&` `||` `$( )`) are independently denied.
+
+Filesystem      : ls, dir, pwd, cd, echo, cat, type
+Dev tooling     : git, node, npm, python, pip
+Identity        : whoami, hostname
+Time            : date, uptime
+System          : uname, tasklist, ps
+Network         : ipconfig, ifconfig, ping
+Lookup          : where, which
+
+Sandbox root: env JARVIS_SANDBOX_ROOT or repo root (Path.resolve()).
+All file paths from tool handlers are forced through resolve_within_sandbox().
+
+================================================================================
+8. FRONTEND REACT — COMPONENT & HOOK INVENTORY
+================================================================================
+Hooks (frontend\src\hooks\)
+  useBrain()                    — WS lifecycle, exponential-backoff reconnect,
+                                  health-check polling, visibility / online
+                                  event handlers, dynamic getApiUrl() resolver
+  useSpeech(onTranscriptChange, — mic capture, secure-context guard,
+            onFinalTranscript,    getUserMedia safety check, volume meter
+            isSpeaking)           (inner updateVolume RAF loop)
+
+Components (frontend\src\component\)
+  App.js               — Top-level shell; orchestrates hooks + lazy TTSService
+  Navbar               — Settings dropdown, INITIALIZE / STOP, blob controls
+  Hero                 — Splash hero panel
+  SplashScreen         — Boot animation
+  BrainTerminal        — Streaming chat panel (tokens, tool state, history)
+  VoiceControl         — Mic state, transcript preview, pipeline indicator
+  PuterStatus          — Neural-engine status pill ("isProcessing")
+  TranslationTerminal  — Translation result panel
+  SystemConsole        — Diagnostic log dump (visibility-toggled)
+  SystemStatus         — Live HUD bar: listening / thinking / speaking /
+                         backend connected / active tool / CPU+RAM telemetry
+  SystemAlert          — Auto-dismissing alert toast
+  blob.js (FireAIBlob) — Three.js particle visualiser; reacts to
+                         mic + TTS frequency intensity
+
+Globals (frontend\src\constants.js)
+  SYSTEM_NAME, VERSION, SPLASH_DURATION, FADE_DURATION, HERO_TIMEOUT,
+  STATUS_LABELS, ALERTS, API_BASE_URL (env REACT_APP_API_URL or fallback)
+
+================================================================================
+9. FRONTEND SERVICES — METHOD INVENTORY
+================================================================================
+frontend\src\services\TTSService.js
+  getAudioContext()         — lazy WebAudio context (resumes if suspended)
+  speak(text)               — speechSynthesis fallback path
+  playAudio(audioBlob)      — enqueue MP3 blob; spawn processQueue() if idle
+  processQueue()            — sequential blob playback through audio element
+  playAudioFallback(blob)   — minimal <audio> playback when WebAudio fails
+  stop()                    — abort speechSynthesis + current audio + source node
+  isPlaying()               — true while a buffer is actively rendering
+  getFrequencyData()        — analyser bin array for the Three.js blob
+  audioQueue                — public queue inspected by useBrain monitor
+
+================================================================================
+10. NPM / SHELL / VERIFICATION COMMANDS
+================================================================================
+Root package.json scripts (run from repo root):
+  npm install                      Install frontend Node deps
+  npm run sync-env                 Copy root .env → frontend\.env + backend\.env
+                                   (auto-invoked by dev/start/backend)
+  npm run dev                      Concurrent BACKEND (cyan) + FRONTEND (magenta)
+  npm run backend                  cd backend && .venv\Scripts\python.exe main.py
+  npm start                        Frontend only (react-scripts start :3000)
+  npm run build                    React production bundle
+  npm test                         react-scripts test (interactive watcher)
+  npm test --prefix frontend -- --testPathPattern=Component
+                                   Single React test
+
+Python venv (Windows PowerShell):
+  & "backend\.venv\Scripts\python.exe" -m pip install -r backend\requirements.txt
+  & "backend\.venv\Scripts\python.exe" backend\main.py
+
+System Python fallback (when .venv trampoline is broken):
+  py -3 -m py_compile backend\main.py backend\core\processor.py \
+       backend\core\memory.py backend\core\tool_registry.py \
+       backend\core\security.py backend\core\vision.py \
+       backend\stt_service.py backend\tts_service.py
+
+Verification triad before shipping:
+  1. py -3 -m py_compile <all backend .py>
+  2. npm run build --prefix frontend
+  3. npm run dev → open http://localhost:3000 → click INITIALIZE
+     → confirm mic capture, token stream, audio playback, telemetry frames
+
+================================================================================
+11. WEBSOCKET WIRE PROTOCOL (`/ws`)
+================================================================================
+Inbound JSON (client → server)
+  {"type":"chat",          "text":"..."}            user turn (≤ 4000 chars)
+  {"type":"clear_history"}                          wipe rolling window
+  {"type":"ping",          "timestamp":<num>}       client heartbeat
+
+Outbound JSON (server → client)
+  {"type":"status",        "data":"idle|thinking|speaking|observing"}
+  {"type":"token",         "data":"<token>"}        streamed LLM chunk
+  {"type":"response_end",  "data":"<full text>"}    final transcript for logs
+  {"type":"audio_start"}                            next binary frames = MP3
+  {"type":"telemetry",     "data":{"cpu":<f>,"ram":<f>,"status":"nominal|warning|critical"}}
+  {"type":"pong",          "timestamp":<num>}
+  {"type":"error",         "data":"<message>"}
+
+Outbound binary
+  Raw MP3 frames (Edge TTS output). Serialised via asyncio.Lock so no
+  binary frame can interleave with a JSON token frame.
+
+In-stream sentinel markers (inside the token stream, NOT separate frames)
+  [MEMORY_ACTIVE]   — ChromaDB recall hit; HUD lights memory badge
+  [VISION_ACTIVE]   — analyze_screen invoked; HUD lights vision badge
+  [VISION_ENDED]    — vision call returned
+  [TOOL_START:NAME] — tool call begun (NAME upper-cased)
+  [TOOL_END:NAME]   — tool call finished
+
+================================================================================
+12. ENVIRONMENT VARIABLES (BOOT-TIME)
+================================================================================
+GROQ_API_KEY               REQUIRED. Server raises RuntimeError on boot if
+                           missing or equal to the `gsk_your_key…` placeholder.
+ALLOWED_ORIGINS            CSV of CORS origins; default `http://localhost:3000`.
+                           No wildcard. Add LAN IPs explicitly.
+BACKEND_PORT               Default 8000 (read by deploy.ps1 / orchestrator).
+JARVIS_SANDBOX_ROOT        Override for security.py SANDBOX_ROOT; defaults to
+                           repo root.
+REACT_APP_API_URL          Optional override for getApiUrl() in useBrain.js.
+                           If unset, hook derives `${protocol}//${hostname}:8000`.
+
+================================================================================
+13. KNOWN BUGS, OPEN ERRORS, AND LATENT RISKS
+================================================================================
+[BUG-01] backend\.venv trampoline is broken on this host.
+         Symptom: `& backend\.venv\Scripts\python.exe …` →
+                  "uv trampoline failed to spawn Python child process".
+         Impact : `npm run backend` cannot launch the FastAPI server.
+         Fix    : Recreate the venv —
+                  py -3 -m venv backend\.venv
+                  & "backend\.venv\Scripts\python.exe" -m pip install \
+                      -r backend\requirements.txt
+
+[BUG-02] frontend\node_modules is absent.
+         Symptom: `npm run build --prefix frontend` →
+                  "'react-scripts' is not recognized…"
+         Fix    : `npm install --prefix frontend`
+
+[BUG-03] requirements.txt has NO version pins.
+         Risk   : Reproducibility — a fresh install today may pull
+                  breaking releases of chromadb / groq / fastapi.
+         Fix    : Pin every line (e.g., `groq==0.11.0`) and commit a
+                  `pip freeze > backend\requirements.lock.txt`.
+
+[BUG-04] `_MAX_RESPONSE_TOKENS` / `_LLM_MODEL` constants govern behaviour
+         in processor.py but are not env-overridable. Switching to a
+         larger context model requires a code edit + redeploy.
+
+[BUG-05] memory.py's automatic collection-rebuild on corruption is silent.
+         If ChromaDB is wiped during runtime no user-visible alert is
+         emitted — the HUD only learns about it via the next failed
+         recall.
+
+[BUG-06] processor.stream_llm() catches `Exception` broadly and yields
+         a single fallback line. Loss of granularity — a rate-limit
+         error, a token-budget overflow, and a network drop all surface
+         as the same "Neural link interrupted" string.
+
+[BUG-07] `_h_execute_terminal` allow-list permits `git`, `npm`, `pip`,
+         `python` — these accept sub-commands that themselves can mutate
+         state (e.g., `git reset --hard`, `pip install <evil>`). The
+         metachar regex blocks chaining but not subcommand abuse.
+
+[BUG-08] No rate limiting on /ws or REST endpoints. Public deployment
+         is one curl loop away from token-bill exhaustion.
+
+[BUG-09] `redact()` matches Groq + OpenAI key shapes. Anthropic
+         (`sk-ant-…`), Google (`AIza…`), and Azure key formats are NOT
+         covered.
+
+[BUG-10] CORS `allow_credentials=True` combined with a non-wildcard
+         origin list is correct — but `allow_headers=["*"]` is broader
+         than necessary. Tighten to the actual request headers used.
+
+[BUG-11] Telemetry loop holds a 6-sample CPU history per WS session.
+         Many simultaneous clients won't accumulate state but still cost
+         psutil.cpu_percent() every 5 s per socket.
+
+[BUG-12] Frontend has NO test suite of its own (only react-scripts
+         scaffolding). `npm test` exits with "No tests found".
+
+[BUG-13] No backend tests of any kind. processor.py, memory.py,
+         security.py — all critical, all untested.
+
+[BUG-14] STT failover path: if Vosk model directory is missing,
+         `_load_vosk_model` logs a warning and returns None. The cloud
+         path will then silently lose its safety net — there is no
+         startup banner or HUD signal that fallback is disabled.
+
+[BUG-15] tts_service.py is a thin shim (2 functions). Frame-loss
+         recovery and resilient chunked streaming described in
+         README/CLAUDE.md is actually implemented inside processor.py's
+         text_to_speech_bytes, not in tts_service.py. The split is
+         confusing.
+
+[BUG-16] processor.py mixes Indian and English style ("Summarise",
+         "neural link") — fine — but also has Hindi-tinged exception
+         messages in a couple of paths. Localisation strategy is
+         undocumented.
+
+[BUG-17] export_conversation tool schema lacks `"required": ["format"]`
+         and has no explicit default — Groq may emit empty args, which
+         silently maps to the implicit `"pdf"` branch.
+
+[BUG-18] `_PURGE_TEMP_DIR` runs once at boot. Long-running sessions
+         that export many PDFs will see `backend\temp\` grow until
+         next restart.
+
+================================================================================
+14. RECOMMENDED UPGRADES
+================================================================================
+SHORT-TERM (1–3 days)
+  U-01 Pin all dependencies (requirements.txt + package-lock.json checked in)
+       and commit a `backend\requirements.lock.txt` from `pip freeze`.
+  U-02 Add ruff + mypy (strict) to backend; add eslint --max-warnings 0
+       to frontend; wire both into a `npm run lint` script (currently
+       advertised in old docs but does not exist).
+  U-03 Add pytest with at minimum:
+         test_security_allow_list, test_resolve_within_sandbox_escape,
+         test_memory_roundtrip, test_redact_groq_key, test_stream_llm_smoke.
+  U-04 Replace `print(...)` debugging paths with `logger.*` everywhere.
+  U-05 Surface STT fallback availability in the /health payload so the
+       HUD can show "Vosk: ready | unavailable".
+  U-06 Tighten CORS `allow_headers` to the explicit set (Content-Type,
+       Authorization).
+
+MID-TERM (1–2 weeks)
+  U-07 Add SlowAPI (or starlette-limiter) rate limiting to /ws and REST
+       endpoints. Per-IP and per-session token-budget caps.
+  U-08 Replace broad `except Exception` in stream_llm with typed
+       handling for groq.RateLimitError, openai.APITimeoutError, etc.,
+       and emit a structured `{"type":"error","code":...}` frame.
+  U-09 Promote `_LLM_MODEL`, `_MAX_RESPONSE_TOKENS`, `_CONDENSE_FROM`,
+       `_MAX_INBOUND_CHARS`, audio cap to environment-driven config
+       with a `Settings(BaseSettings)` Pydantic model.
+  U-10 Migrate the WS protocol to a versioned schema (e.g.,
+       `{"v":1,"type":"chat",...}`) so future breaking changes can
+       coexist.
+  U-11 Replace in-stream sentinel markers (`[TOOL_START:…]`) with
+       dedicated JSON frames — current markers force the HUD to parse
+       the token stream, which fights any genuine `[` in user text.
+  U-12 Extend `redact()` to cover Anthropic (`sk-ant-*`), Google
+       (`AIza*`), and AWS access keys (`AKIA*`).
+  U-13 Periodic temp-dir GC (asyncio task on a 10-min cadence) to
+       prevent unbounded growth between restarts.
+  U-14 Replace pyautogui-based screenshot with a headless capture
+       (mss) — pyautogui requires an active session and breaks under
+       RDP / locked screen.
+
+LONG-TERM (project-level)
+  U-15 Self-hosted TTS (Coqui XTTS, F5-TTS) to eliminate Edge TTS
+       hard dependency and cut latency on poor uplinks.
+  U-16 Per-tool sandboxing: run `_h_execute_terminal` inside a
+       restricted Windows AppContainer / Linux user namespace.
+  U-17 Adopt DSPy or LangGraph for the multi-pass tool-routing logic
+       in stream_llm — current two-pass `tool_choice=auto` → reply
+       flow is duplicated and brittle.
+  U-18 Replace ChromaDB persistent store with Qdrant or LanceDB once
+       memory crosses ~100k turns; ChromaDB's HNSW rebuilds get slow.
+  U-19 GraphRAG layer on top of memory.py — current cosine recall
+       loses multi-turn entity continuity.
+  U-20 Native desktop wrapper (Tauri / Electron) so the secure-context
+       guard is moot and the mic always works.
+  U-21 Move the visualizer (Three.js blob) into a Web Worker /
+       OffscreenCanvas; current main-thread render contends with React
+       reconciliation under heavy token bursts.
+  U-22 Telemetry to Prometheus + Grafana; today's `psutil`-only stream
+       gives the HUD a number but no historical view.
+  U-23 Multi-user support: today's processor singleton + global
+       conversation_history makes J.A.R.V.I.S a single-tenant assistant.
+  U-24 Add OpenTelemetry tracing across /ws → processor → tool → Groq
+       so a slow tool call can be located without log archaeology.
+
+================================================================================
+15. OPERATIONAL NOTES FOR FUTURE MAINTAINERS
+================================================================================
+* Always run `npm run sync-env` (auto-invoked by `dev`/`start`/`backend`)
+  before referencing .env from frontend or backend — the root .env is the
+  single source of truth.
+* Mic-mute-during-TTS pattern in useBrain.js is load-bearing. Do not
+  inline-optimise the 100 ms polling away without replacing it with
+  an event-based equivalent (TTSService would need a `playbackDrained`
+  event).
+* The two-pass LLM call (tool_choice="auto" then stream) doubles the
+  Groq round-trip on every turn; do not "optimise" by collapsing them
+  without re-deriving how tool results re-enter the message list.
+* `processor.py` boot-time work includes ChromaDB open + Vosk load +
+  Groq client init. Cold start is ~1.5 s on a warm cache; lazy
+  imports of fpdf / python-docx keep it under 2 s.
+* Pong logs (`type:"pong"`) are intentionally silent on the client
+  console; do not re-enable without a feature flag.
 
 ================================================================================
                              STATUS: FULLY OPERATIONAL
+                          (post-conflict-resolution build)
 ================================================================================

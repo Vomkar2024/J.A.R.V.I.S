@@ -1,109 +1,76 @@
-# J.A.R.V.I.S Developer Guide (CLAUDE.md)
+# CLAUDE.md
 
-This document provides a comprehensive operational blueprint for developers and AI agents working on the **Jointly Advanced & Real-time Visionary Intelligence System (J.A.R.V.I.S)**. It outlines key development commands, architectural rules, code style guidelines, and crucial connection resiliency systems.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
----
+## Dev Commands (Windows / PowerShell)
 
-## 🚀 Development Command Reference
+All scripts run from repo root. `npm run sync-env` is auto-invoked by `dev`/`start`/`backend` and copies the root `.env` to `frontend\.env` and `backend\.env` via PowerShell `cp`.
 
-### 📦 Root Level (Unified Orchestration)
-All dependencies and concurrency scripts are managed from the root directory.
-* **Install All Dependencies**: `npm install` (Installs React and backend environment configurations)
-* **Start Core Application Concurrently**: `npm run dev` (Launches React HUD + FastAPI server concurrently)
-* **Sync Environment Files**: `npm run sync-env` (Automatically replicates root `.env` values to frontend/ and backend/ subdirectories)
+| Command | Effect |
+|---|---|
+| `npm install` | Installs frontend Node deps. Python deps install separately. |
+| `npm run dev` | Starts backend + frontend concurrently (BACKEND cyan, FRONTEND magenta). |
+| `npm run backend` | Runs `cd backend && .venv\Scripts\python.exe main.py` (FastAPI on `:8000`). |
+| `npm start` | Frontend only (`react-scripts start` on `:3000`). |
+| `npm run build` | React production build. |
+| `npm test` | `react-scripts test` (interactive watcher). |
 
-### 📡 React HUD Frontend (`/frontend`)
-The React HUD resides in the `/frontend` directory and is built using React 19 and Three.js.
-* **Start React Dev Server**: `npm run start` (Starts development server on http://localhost:3000)
-* **Build Production Bundle**: `npm run build` (Compiles React components and assets into the `/build` folder)
-* **Run Linter / Verification**: `npm run lint` (Checks frontend files for errors or structural anomalies)
-* **Execute Tests**: `npm run test` (Runs React component test suites)
+Python venv lives at `backend\.venv\` (NOT `venv_jarvis`). Install Python deps via `backend\.venv\Scripts\pip.exe install -r backend\requirements.txt`.
 
-### 🧠 FastAPI Core Backend (`/backend`)
-The FastAPI application resides in the `/backend` directory and manages STT/TTS processing, local ChromaDB embeddings, tool executions, and WebSocket stream orchestration.
-* **Activate Virtual Environment (Windows PowerShell)**: `.\venv_jarvis\Scripts\Activate.ps1`
-* **Activate Virtual Environment (Windows CMD)**: `.\venv_jarvis\Scripts\activate.bat`
-* **Activate Virtual Environment (UNIX/macOS)**: `source venv_jarvis/bin/activate`
-* **Install Python Dependencies**: `pip install -r requirements.txt`
-* **Start Backend Server**: `npm run backend` or `python main.py` (Launches FastAPI on port `8000`)
-* **Validate Compilation**: `python -m py_compile main.py core/processor.py core/memory.py`
+There is **no lint script**. Run `python -m py_compile backend\main.py backend\core\processor.py` for backend syntax checks.
 
----
+Single React test: `npm test --prefix frontend -- --testPathPattern=ComponentName`.
 
-## 🎨 Architectural Design & Coding Guidelines
+## Boot-Time Guards (do not bypass)
 
-### 1. Unified React State Management
-* **Custom Hooks**: Business logic and state coordination are strictly encapsulated in custom hooks:
-  * `useBrain.js`: Encapsulates connection lifecycle, WebSockets state machine, and data processing.
-  * `useSpeech.js`: Orchestrates local browser-based/Whisper-based speech capture and visualizer telemetry.
-* **Component Styling**: Always leverage dynamic Vanilla CSS classes under `/styles` for precise rendering control. Keep UI responsive and visually stunning (glassmorphic visualizer panels, particle systems, HSL-derived color scales).
-* **Component Separation**: Keep HUD layouts modular. Decouple visual assets/Three.js renderers from connection and logical states.
+Defined in [backend/main.py](backend/main.py):
 
-### 2. Python Backend Core Architecture
-* **Strict Non-Blocking I/O**: Utilize modern `async`/`await` routines for all networking and pipeline tasks. Any heavy computation (e.g. PDF generation, deep OS tools) must be executed in external executors or background thread pools to avoid blocking the FastAPI event loop.
-* **Modular Extensibility**: To extend J.A.R.V.I.S capabilities, subclasses must inherit from `Tool` under `backend/core/tool_registry.py` and register their manifest parameters. This lazy-loads tools and secures them against shell execution vectors.
-* **Strict Parameter Typing**: Ensure defensive variable checking and type casting when parsing arguments from the LLM or standard configurations.
+- `GROQ_API_KEY` is read at startup. If missing or equal to placeholder `gsk_your_key...`, the server **refuses to start** with `RuntimeError`. Always populate root `.env` before launching.
+- `ALLOWED_ORIGINS` (comma-separated) controls CORS. Default is `http://localhost:3000` — no wildcard. Add LAN origins explicitly when testing from another device.
+- Inbound text is clamped to `_MAX_INBOUND_CHARS = 4000`; audio uploads capped at 25 MiB.
+- All WebSocket sends are serialized through an `asyncio.Lock` so JSON telemetry never interleaves with binary MP3 frames.
 
----
+## WebSocket Protocol (`/ws`)
 
-## 🛡️ Connection & Audio Resilience Architecture
+**Inbound JSON** (client → server):
+- `{"type": "chat", "text": "..."}` — user turn
+- `{"type": "clear_history"}` — wipe session memory
+- `{"type": "ping", "timestamp": <num>}` — heartbeat
 
-J.A.R.V.I.S is engineered for bulletproof reliability across varying local network interfaces, secure contexts, and high-frequency conversation pipelines. These core resilience pillars must never be bypassed:
+**Outbound JSON** (server → client):
+`status` · `token` · `response_end` · `audio_start` · `telemetry` · `pong` · `error`
 
-### Pillar 1: Dynamic WebSocket Address Resolution
-To support mobile testing, local area networks (LANs), and custom domains, J.A.R.V.I.S dynamically resolves connection URIs rather than relying on hardcoded `localhost` schemas.
-* **Implementation** (`useBrain.js`):
-  ```javascript
-  const getApiUrl = () => {
-    if (process.env.REACT_APP_API_URL) {
-      return process.env.REACT_APP_API_URL.replace(/\/+$/, '');
-    }
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:8000`;
-  };
-  ```
-* **Reconnection Protocol**: Employs dynamic exponential backoff with a randomized jitter multiplier andvisibility-aware wakeups (tab focus or network restoration triggers instantaneous re-connection handshakes).
+**Outbound binary**: raw MP3 frames for TTS playback. Never mix binary and JSON in the same logical frame — they're separate `send_bytes` / `send_text` calls behind the lock.
 
-### Pillar 2: True Audio Playback Monitoring (No Self-Talk Feedback)
-To prevent the critical feedback loop where J.A.R.V.I.S captures and transcribes his own speech (leading to infinite loops), microphone input is strictly governed by a reactive audio monitor.
-* **The Bug**: Synchronous calls to `playAudio()` return immediately while the sound card continues playing the binary audio stream.
-* **The Solution**: An active playback polling monitor checks `TTSService.isPlaying()` and `TTSService.audioQueue.length` every 100ms. The microphone and speech capture channels remain muted until the audio playback queue is fully drained:
-  ```javascript
-  useEffect(() => {
-    if (!isSpeaking) return;
-    const interval = setInterval(() => {
-      if (!TTSService.isPlaying() && TTSService.audioQueue.length === 0) {
-        setIsSpeaking(false);
-        setPipelineState('idle');
-        clearInterval(interval);
-      }
-    }, 100);
-    return () => clearInterval(interval);
-  }, [isSpeaking]);
-  ```
+Telemetry frames emit every 5 s (`cpu`, `ram`, `status`); idle pong every 20 s defeats proxy timeouts.
 
-### Pillar 3: Secure Context Guards & getUserMedia Safety Checks
-Modern browsers prevent microphone access on insecure connections (standard HTTP outside of localhost). J.A.R.V.I.S guards against raw API crashes by warning early and handling failures gracefully.
-* **Implementation** (`useSpeech.js`):
-  ```javascript
-  const isSecure = window.isSecureContext !== false;
-  if (!isSecure) {
-    console.warn('[Neural] App is running in an insecure context. Microphone API might be disabled by the browser.');
-  }
-  
-  // Guard inside startSpeech
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error("Microphone API (getUserMedia) is not supported on this browser or connection is insecure. Chrome/Firefox/Safari restrict audio capture to secure contexts (localhost or HTTPS).");
-  }
-  ```
+## Architecture Map (one-liners)
 
----
+- [backend/main.py](backend/main.py) — FastAPI app, `/ws` endpoint, telemetry/keepalive loops, lifespan-managed singleton `JarvisProcessor`.
+- [backend/core/processor.py](backend/core/processor.py) — orchestrator: memory lookup → Groq LLM stream → tool routing → TTS dispatch.
+- [backend/core/memory.py](backend/core/memory.py) — ChromaDB RAG layer with timestamped recall; persistent store at `backend/memory_db/`.
+- [backend/core/tool_registry.py](backend/core/tool_registry.py) — lazy-loaded tool manifest; new tools subclass `Tool` and self-register.
+- [backend/core/security.py](backend/core/security.py) — `redact()` for log scrubbing + destructive-command blocklist.
+- [backend/core/vision.py](backend/core/vision.py) — screenshot capture and visual context.
+- [backend/stt_service.py](backend/stt_service.py) — Whisper (cloud) → Vosk (local) failover.
+- [backend/tts_service.py](backend/tts_service.py) — Edge TTS chunked streaming with frame-loss recovery.
+- [frontend/src/hooks/useBrain.js](frontend/src/hooks/useBrain.js) — WebSocket lifecycle, exponential-backoff reconnect, dynamic URL resolution (`REACT_APP_API_URL` override, else `${protocol}//${hostname}:8000`).
+- [frontend/src/hooks/useSpeech.js](frontend/src/hooks/useSpeech.js) — mic capture, secure-context guard, getUserMedia safety.
+- [frontend/src/services/TTSService.js](frontend/src/services/TTSService.js) — audio queue + playback monitor (poll `isPlaying()` / `audioQueue.length` every 100 ms to suppress mic during self-speech).
+- Frontend components live in [frontend/src/component/](frontend/src/component/) (singular — not `components/`).
 
-## 🔍 Code Review & Verification Guidelines
+## Conventions
 
-Before submitting any code modifications, perform these mandatory checks:
+- All backend I/O is `async`; offload heavy CPU work (PDF/Word generation) to thread pools, never block the event loop.
+- New tools: subclass `Tool` in `tool_registry.py`, implement `execute()`, declare manifest params — registration is automatic.
+- Memory writes are non-blocking; ChromaDB auto-chunks long conversations.
+- Mic must stay muted while TTS plays — the `TTSService` polling pattern prevents self-talk feedback loops; do not remove it.
+- Pong logs (`type: "pong"`) are intentionally silenced on the client to avoid console spam.
 
-1. **Python Syntax Compilation**: Run `python -m py_compile backend/core/processor.py` to confirm zero static compiler errors.
-2. **React Production Compilation**: Run `npm run build --prefix frontend` to guarantee typescript/javascript syntax compiles without breaking visual styles.
-3. **Log Level Management**: Keep WebSocket ping/pong logs silenced (`type: 'pong'`) to prevent console spam, but ensure critical errors are bubbled to the HUD console.
+## Verification Before Shipping
+
+1. `python -m py_compile backend\main.py backend\core\processor.py backend\core\memory.py`
+2. `npm run build --prefix frontend`
+3. `npm run dev`, then open `http://localhost:3000`, click **INITIALIZE**, verify mic + TTS round-trip.
+
+See [AGENTS.md](AGENTS.md) for module-by-module deep dives and common agent tasks.
