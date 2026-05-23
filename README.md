@@ -6,6 +6,35 @@ A voice-first AI desktop assistant: real-time WebSocket streaming, hybrid STT fa
 
 ---
 
+## Production Target
+
+**Native Windows desktop app via Tauri v2.** Not a generic "runs on Windows" web app — the distribution target is a single MSI/NSIS installer (~30–50 MB idle, ~5× leaner than Electron) where:
+
+- The **shell** is Rust + Tauri v2 ([src-tauri/](src-tauri/)), rendering through Microsoft Edge WebView2.
+- The **React 19 + Three.js HUD** is bundled into the webview at build time.
+- The **Python FastAPI core** is compiled with PyInstaller into a single-file `jarvis-core.exe` and registered as a **Tauri sidecar** — auto-spawned at app launch, killed on exit. No separate Python install required on the user's machine.
+
+The shell is scaffolded ([src-tauri/](src-tauri/), [backend/jarvis_core.spec](backend/jarvis_core.spec), [backend/build-sidecar.ps1](backend/build-sidecar.ps1)). Daily dev still uses `npm run dev`; production packaging is `npm run tauri:build`.
+
+### Building the MSI
+
+```powershell
+# One-time prerequisites
+rustup default stable                    # Rust toolchain for the Tauri shell
+npm install --prefix frontend            # React deps
+backend\.venv\Scripts\pip.exe install -r backend\requirements.txt   # Python deps incl. pyinstaller
+cargo tauri icon path\to\source-icon.png # Generates src-tauri\icons\*
+
+# Build
+npm run tauri:build
+# Output: src-tauri\target\release\bundle\msi\J.A.R.V.I.S_3.2.0_x64.msi
+#         src-tauri\target\release\bundle\nsis\J.A.R.V.I.S_3.2.0_x64-setup.exe
+```
+
+`npm run tauri:dev` opens the desktop window against the React dev server — assumes you've started the backend yourself with `npm run backend`. In release builds the Rust shell spawns the PyInstaller sidecar and waits on `/health` before revealing the window.
+
+---
+
 ## What's New in v3.2
 
 - **Sandboxed shell execution** — `execute_terminal_command` runs inside a Docker container, a Windows Job Object, or a hardened subprocess. Selection via `JARVIS_SANDBOX_BACKEND` or runtime capability probe.
@@ -33,11 +62,23 @@ A voice-first AI desktop assistant: real-time WebSocket streaming, hybrid STT fa
 
 ## Requirements
 
+### Development (this repo)
 - Node.js 18+
 - Python 3.10+
 - Groq API key — [console.groq.com](https://console.groq.com/)
 - Microphone + speakers
 - (Optional) Docker Desktop — for the strongest sandbox backend
+
+### Production build (when scaffolded)
+- Rust toolchain (`rustup`) for the Tauri shell
+- WebView2 runtime (preinstalled on Windows 11; auto-installed by Tauri on Windows 10)
+- PyInstaller (in the backend venv) for the sidecar binary
+- See [Resilience_Report §18 U-15](Resilience_Report.txt) for the full Tauri scaffold steps
+
+### End-user (post-MSI install)
+- Windows 10 / 11 x64
+- Microphone + speakers
+- Internet (Groq + Edge TTS) — Vosk fallback handles offline STT
 
 ---
 

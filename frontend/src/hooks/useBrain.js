@@ -1,10 +1,23 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import TTSService from '../services/TTSService';
 
-// Dynamic host resolution to support local network devices and alternate hostnames
+// Tauri webview reports its origin as `tauri://localhost` (Windows) or
+// `https://tauri.localhost`. Neither value can be used to reach the
+// sidecar — the sidecar listens on 127.0.0.1:8000. Detect via the
+// runtime-injected `__TAURI_INTERNALS__` (v2) / `__TAURI__` (legacy)
+// globals and force loopback when present.
+const isTauri = () =>
+  typeof window !== 'undefined' &&
+  (Boolean(window.__TAURI_INTERNALS__) || Boolean(window.__TAURI__));
+
+// Dynamic host resolution to support local network devices and alternate hostnames.
 const getApiUrl = () => {
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL.replace(/\/+$/, '');
+  }
+  if (isTauri()) {
+    // Sidecar always binds to loopback when frozen (see backend/main.py).
+    return 'http://127.0.0.1:8000';
   }
   const protocol = window.location.protocol;
   const hostname = window.location.hostname || 'localhost';
@@ -386,7 +399,7 @@ export const useBrain = () => {
       };
 
       // --- CONNECTION ERROR ---
-      ws.onerror = (error) => {
+      ws.onerror = () => {
         console.warn('[WS] ⚠️ Connection error');
         connectingRef.current = false;
         setIsBackendConnected(false);

@@ -1,0 +1,10 @@
+# Tauri / Cargo build artefacts
+target/
+gen/
+
+# Compiled Python sidecar (produced by backend/build-sidecar.ps1).
+# Tracked-with-symlink would be cleaner but cross-platform CI handles
+# this via the build script.
+binaries/jarvis-core*
+!binaries/.gitkeep
+!binaries/README.md

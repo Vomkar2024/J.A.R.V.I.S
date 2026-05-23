@@ -8,9 +8,10 @@ A high-fidelity voice-first AI assistant with real-time streaming, RAG memory, s
 
 ## Project Overview
 
-- **Type**: Fullstack desktop AI assistant (voice + chat + vision + secure storage).
+- **Type**: Native Windows desktop AI assistant (voice + chat + vision + secure storage).
+- **Distribution target**: **Tauri v2** (Rust shell + Edge WebView2) with the FastAPI core as a **PyInstaller-compiled sidecar**. Single-binary MSI/NSIS install, ~30–50 MB idle. Scaffold lives at [src-tauri/](src-tauri/); build with `npm run tauri:build`.
 - **Key features**: real-time bi-directional WebSocket, parallel text/audio streaming, structured control-plane frames, sandboxed shell execution, AES-256-GCM vault.
-- **Setup**: single `npm run dev` boots Python backend + React frontend concurrently.
+- **Development setup**: `npm run dev` boots backend + frontend concurrently (two processes via `concurrently`). The Tauri shell is the production packaging step, not part of the daily dev loop.
 
 ---
 
@@ -48,9 +49,10 @@ J.A.R.V.I.S/
 │   ├── .eslintrc.js               # react-hooks/exhaustive-deps: warn
 │   └── jsconfig.json
 ├── backend/
-│   ├── main.py                    # FastAPI app, /ws, telemetry, lifespan
+│   ├── main.py                    # FastAPI app, /ws, telemetry, lifespan; frozen-mode safe
 │   ├── nexus_routes.py            # /api/nexus/* — encrypted vault API
 │   ├── core/
+│   │   ├── paths.py               # Source-vs-frozen path resolver (TEMP/MEMORY/VAULT)
 │   │   ├── processor.py           # Orchestrator; yields typed events
 │   │   ├── memory.py              # ChromaDB RAG
 │   │   ├── tool_registry.py       # Lazy tool dispatch
@@ -60,9 +62,21 @@ J.A.R.V.I.S/
 │   │   └── vision.py              # Screenshot capture
 │   ├── stt_service.py             # Whisper + Vosk
 │   ├── tts_service.py             # Edge TTS
-│   ├── requirements.txt           # Top-level deps
+│   ├── jarvis_core.spec           # PyInstaller recipe → jarvis-core.exe
+│   ├── build-sidecar.ps1          # Compile + copy to src-tauri/binaries/
+│   ├── requirements.txt           # Top-level deps (incl. pyinstaller)
 │   ├── requirements.lock.txt      # `pip freeze` — exact pins
 │   └── .venv/                     # Python venv (gitignored)
+├── src-tauri/                     # Tauri v2 Rust shell (NEW)
+│   ├── Cargo.toml                 # Rust deps (tauri 2 + plugins + tokio time)
+│   ├── tauri.conf.json            # Window + bundle config; externalBin: jarvis-core
+│   ├── build.rs                   # Invokes tauri-build
+│   ├── src/
+│   │   ├── main.rs                # Subsystem hide + jarvis_lib::run() entry
+│   │   └── lib.rs                 # Sidecar spawn / health probe / clean shutdown
+│   ├── capabilities/default.json  # Tauri v2 permission set
+│   ├── binaries/                  # PyInstaller output lives here (gitignored)
+│   └── icons/                     # Populate via `npm run tauri:icon`
 ├── voice_pack/                    # Vendored ZipVoice TTS (alt engine, not wired)
 ├── .env                           # GROQ_API_KEY, BACKEND_PORT, ALLOWED_ORIGINS
 ├── package.json                   # Root npm scripts (dev / build / sync-env)

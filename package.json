@@ -1,13 +1,21 @@
 {
   "name": "jarvis-project",
-  "version": "2.0.0",
-  "description": "J.A.R.V.I.S — Real-Time AI Voice Assistant",
+  "version": "3.2.0",
+  "description": "J.A.R.V.I.S — Native Windows desktop AI assistant (Tauri v2 + Python sidecar)",
   "scripts": {
     "sync-env": "powershell -Command \"cp .env frontend/.env; cp .env backend/.env\"",
     "start": "npm start --prefix frontend",
     "dev": "npm run sync-env && npx -y concurrently -n BACKEND,FRONTEND -c cyan,magenta \"npm run backend\" \"npm start --prefix frontend\"",
     "backend": "npm run sync-env && cd backend && .venv\\Scripts\\python.exe main.py",
     "build": "npm run sync-env && npm run build --prefix frontend",
-    "test": "npm test --prefix frontend"
+    "test": "npm test --prefix frontend",
+    "sidecar:build": "powershell -ExecutionPolicy Bypass -File backend/build-sidecar.ps1",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "npm run sidecar:build && tauri build",
+    "tauri:icon": "tauri icon"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
   }
 }

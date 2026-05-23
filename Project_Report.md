@@ -5,6 +5,8 @@ Version 3.2 · Author: Shubham · Date: 2026-05-23
 
 This document is the text companion to the original [Project Report.pdf](./Project%20Report.pdf) (May 2026 baseline). The PDF captures the initial submission; this Markdown captures everything that has shipped since.
 
+**Distribution target**: Native Windows desktop app via **Tauri v2** (Rust shell + Microsoft Edge WebView2 + Python FastAPI sidecar). Not a generic "runs on Windows" web app — a single MSI/NSIS installer that ships the entire stack inside one process tree. Tauri-shell scaffolding is the next deliverable; see [§9 Future Work](#9-future-work).
+
 ---
 
 ## 1. Abstract
@@ -160,11 +162,23 @@ Raw MP3 frames. Serialised via `asyncio.Lock` so no binary frame interleaves wit
 
 ## 9. Future Work
 
-Short-term: server-side `stream_llm` timeout, client-side tool watchdog, `npm run lint` script, pytest suite, rate limiting (SlowAPI), CSRF on vault.
+**Next deliverable — Tauri v2 production wrapper.** Scaffold `src-tauri/` with the existing React build as `distDir`; compile `backend/main.py` with PyInstaller into `jarvis-core-x86_64-pc-windows-msvc.exe`; register as a Tauri sidecar via `tauri.conf.json` `bundle.externalBin`; spawn on the Tauri `setup` hook, kill on `RunEvent::ExitRequested`; ship `.env` (or use `tauri_plugin_store` for runtime config) so the user doesn't manage `GROQ_API_KEY` manually. End state: one `cargo tauri build` produces a signed MSI/NSIS installer; one icon click launches the whole stack.
 
-Mid-term: settings via Pydantic BaseSettings, versioned WS schema, extended secret redaction (Anthropic/Google/AWS), periodic temp GC, `mss` instead of `pyautogui` for RDP-safe screenshots.
+**Why Tauri v2 over Electron** —
 
-Long-term: ZipVoice self-hosted TTS, true Windows AppContainer, GraphRAG, Qdrant migration, Tauri desktop wrapper, OpenTelemetry tracing, multi-user.
+| Metric | Electron | Tauri v2 (chosen) |
+|---|---|---|
+| Native integration | Chromium embed | WebView2 via Windows App SDK |
+| Idle memory | ~150 MB+ | ~30–50 MB |
+| Python sidecar | Custom child-process bundling | First-class `externalBin` config |
+| Three.js performance | Smooth (Chromium) | Smooth (Edge WebView2) |
+| Installer | ~80 MB+ | ~15–25 MB |
+
+**Short-term** (independent of Tauri): server-side `stream_llm` timeout, client-side tool watchdog, `npm run lint` script, pytest suite, rate limiting (SlowAPI), CSRF on vault.
+
+**Mid-term**: settings via Pydantic BaseSettings, versioned WS schema, extended secret redaction (Anthropic/Google/AWS), periodic temp GC, `mss` instead of `pyautogui` for RDP-safe screenshots.
+
+**Long-term**: ZipVoice self-hosted TTS, true Windows AppContainer, GraphRAG, Qdrant migration, OpenTelemetry tracing, multi-user.
 
 Full ledger: [Resilience_Report.txt §18](./Resilience_Report.txt).
 

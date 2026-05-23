@@ -1,10 +1,24 @@
 ================================================================================
           J.A.R.V.I.S CONNECTION & NEURAL LINK RESILIENCE REPORT
 ================================================================================
-System Version:    3.2 (sandbox + structured frames + NexusVault hardened)
+System Version:    3.2 (sandbox + structured frames + NexusVault hardened
+                       + Tauri shell scaffolded)
 Date:              2026-05-23
-Target OS:         Windows 11 / Windows 10 (PowerShell)
-Framework Stack:   React 19 + Three.js (HUD) · FastAPI + Python 3.10+ (Core)
+Production Target: Native Windows desktop app via Tauri v2
+                     · Shell        : Rust (Tauri v2) + Microsoft Edge WebView2
+                     · Frontend     : React 19 + Three.js (bundled into webview)
+                     · Backend      : Python 3.10+ FastAPI compiled to a PyInstaller
+                                      single-file sidecar; auto-spawned by Tauri at
+                                      app launch, killed at app exit.
+                     · Distribution : MSI / NSIS installer produced by `npm run tauri:build`
+                                      (Windows 10/11 x64; ~30-50 MB idle footprint).
+                     · Scaffold     : src-tauri/ (Cargo.toml, tauri.conf.json, src/lib.rs,
+                                      capabilities/default.json) + backend/jarvis_core.spec
+                                      + backend/build-sidecar.ps1 + backend/core/paths.py.
+Development OS:    Windows 11 / Windows 10 (PowerShell) — `npm run dev` boots the
+                     two processes via `concurrently`, no Tauri shell required.
+Framework Stack:   React 19 + Three.js (HUD) · FastAPI + Python 3.10+ (Core) ·
+                   Rust + Tauri v2 (Desktop Shell)
 Repo Root:         c:\Users\shubh\Documents\Omkar\J.A.R.V.I.S
 ================================================================================
 

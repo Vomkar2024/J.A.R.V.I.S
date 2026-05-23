@@ -17,3 +17,7 @@ python-docx
 fpdf
 cryptography
 pywin32; sys_platform == "win32"
+
+# Build-time only — used by backend/build-sidecar.ps1 to produce the
+# Tauri externalBin. Not required at runtime.
+pyinstaller

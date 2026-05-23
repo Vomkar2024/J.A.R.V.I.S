@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from core.paths import VAULT_DIR
 from core.security import redact
 
 logger = logging.getLogger("jarvis.secure_storage")
@@ -19,14 +20,10 @@ class NexusSecureStorage:
     Uses AES-256-GCM for file/index encryption and PBKDF2-HMAC-SHA256 for key derivation.
     """
     def __init__(self, vault_dir=None):
-        if vault_dir is None:
-            # Default to vault directory in workspace root
-            core_dir = os.path.dirname(os.path.abspath(__file__))
-            self.workspace_root = os.path.dirname(os.path.dirname(core_dir))
-            self.vault_dir = os.path.join(self.workspace_root, "vault")
-        else:
-            self.vault_dir = vault_dir
-
+        # In dev, vault_dir defaults to <repo>/vault/. When the backend is
+        # shipped as a PyInstaller sidecar, core.paths.VAULT_DIR points
+        # at the per-user APPDATA location so blobs survive app updates.
+        self.vault_dir = vault_dir or str(VAULT_DIR)
         os.makedirs(self.vault_dir, exist_ok=True)
         self.index_path = os.path.join(self.vault_dir, "index.enc")
 

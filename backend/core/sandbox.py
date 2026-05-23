@@ -37,8 +37,8 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
+from core.paths import SANDBOX_RUN_DIR
 from core.security import (
-    SANDBOX_ROOT,
     is_command_allowed,
     redact,
 )
@@ -49,7 +49,7 @@ logger = logging.getLogger("jarvis.sandbox")
 
 _DEFAULT_TIMEOUT_S: Final[float] = 8.0
 _DEFAULT_MAX_OUTPUT: Final[int] = 2000
-_RUN_DIR: Final[Path] = SANDBOX_ROOT / ".sandbox_run"
+_RUN_DIR: Final[Path] = SANDBOX_RUN_DIR
 
 # Environment whitelist — anything outside this set is stripped before
 # launching the subprocess. Keep this minimal: a tool that needs more

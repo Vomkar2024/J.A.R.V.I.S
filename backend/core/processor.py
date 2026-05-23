@@ -31,6 +31,7 @@ import edge_tts
 from groq import Groq
 
 from core.memory import JarvisMemory
+from core.paths import TEMP_DIR, VOSK_MODEL_DIR
 from core.security import redact
 from core.tool_registry import (
     TOOL_DEFINITIONS,
@@ -79,9 +80,7 @@ class JarvisProcessor:
             )
 
         self.client: Groq = Groq(api_key=api_key)
-        self.temp_dir: str = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "temp"
-        )
+        self.temp_dir: str = str(TEMP_DIR)
         os.makedirs(self.temp_dir, exist_ok=True)
         self._purge_temp_dir()
 
@@ -128,9 +127,7 @@ class JarvisProcessor:
         if not _HAS_VOSK:
             logger.info("Vosk not installed; local STT disabled.")
             return None
-        path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "model"
-        )
+        path = str(VOSK_MODEL_DIR)
         if not os.path.exists(path):
             logger.info("Vosk model not found at %s; local STT disabled.", path)
             return None

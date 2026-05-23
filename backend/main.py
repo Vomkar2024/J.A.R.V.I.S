@@ -21,8 +21,10 @@ import contextlib
 import json
 import logging
 import os
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Final
 
 from dotenv import find_dotenv, load_dotenv
@@ -39,6 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from core.paths import IS_FROZEN, DATA_ROOT, ensure_data_root
 from core.processor import JarvisProcessor
 from core.security import redact
 from nexus_routes import router as nexus_router
@@ -51,7 +54,22 @@ except ImportError:
 
 # --- Bootstrap ---------------------------------------------------------------
 
-load_dotenv(find_dotenv())
+# Layered .env discovery so the same binary works in dev (repo .env),
+# under a Tauri sidecar (next to the .exe), and from APPDATA (user config).
+def _load_env() -> None:
+    if IS_FROZEN:
+        exe_dir = Path(sys.executable).resolve().parent
+        for candidate in (exe_dir / ".env", DATA_ROOT / ".env"):
+            if candidate.is_file():
+                load_dotenv(candidate)
+                return
+    discovered = find_dotenv(usecwd=True)
+    if discovered:
+        load_dotenv(discovered)
+
+
+_load_env()
+ensure_data_root()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -402,7 +420,19 @@ async def health() -> dict:
 
 
 if __name__ == "__main__":
+    # PyInstaller + Windows multiprocessing safety. Without this, any
+    # subprocess that re-imports the bundled main can re-exec the
+    # entire FastAPI server in an infinite spawn loop.
+    if IS_FROZEN:
+        import multiprocessing
+        multiprocessing.freeze_support()
+
     import uvicorn
     port = int(os.getenv("BACKEND_PORT", 8000))
-    logger.info("J.A.R.V.I.S Neural Engine starting on port %d", port)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Bind to loopback only when running as a Tauri sidecar — there's no
+    # legitimate reason for the HUD's webview to need LAN access to its
+    # own embedded backend. The dev workflow keeps 0.0.0.0 for mobile testing.
+    host = "127.0.0.1" if IS_FROZEN else "0.0.0.0"
+    logger.info("J.A.R.V.I.S Neural Engine starting on %s:%d (frozen=%s)",
+                host, port, IS_FROZEN)
+    uvicorn.run(app, host=host, port=port)

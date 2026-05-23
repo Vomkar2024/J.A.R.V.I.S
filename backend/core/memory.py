@@ -16,6 +16,7 @@ import uuid
 
 import chromadb
 
+from core.paths import MEMORY_DB_DIR
 from core.security import redact
 
 logger = logging.getLogger("jarvis.memory")
@@ -29,11 +30,11 @@ class JarvisMemory:
     def __init__(self, db_path: str | None = None) -> None:
         """
         @param db_path  Filesystem location for ChromaDB persistence. When
-                        ``None``, defaults to ``<project>/backend/memory_db``.
+                        ``None``, defaults to ``core.paths.MEMORY_DB_DIR``
+                        — ``backend/memory_db/`` in dev, the platform's
+                        per-user data dir when frozen by PyInstaller.
         """
-        self.db_path: str = db_path or os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "memory_db"
-        )
+        self.db_path: str = db_path or str(MEMORY_DB_DIR)
         os.makedirs(self.db_path, exist_ok=True)
         self.client = chromadb.PersistentClient(
             path=self.db_path,

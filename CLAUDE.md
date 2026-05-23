@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Distribution Target
+
+**Native Windows desktop app via Tauri v2** (Rust shell + Microsoft Edge WebView2 + Python sidecar). The React HUD is bundled into the webview at build time; the FastAPI core is compiled to a PyInstaller single-file binary registered as a Tauri sidecar — auto-spawned on app start, killed on exit.
+
+Scaffolded files:
+- [src-tauri/Cargo.toml](src-tauri/Cargo.toml), [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) — Tauri v2 shell config.
+- [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — sidecar spawn + `/health` probe + window-reveal + clean shutdown.
+- [src-tauri/capabilities/default.json](src-tauri/capabilities/default.json) — Tauri v2 permission set (allow-execute on `binaries/jarvis-core` sidecar).
+- [backend/jarvis_core.spec](backend/jarvis_core.spec) — PyInstaller recipe with hidden-import list for ChromaDB / uvicorn / vosk / edge-tts.
+- [backend/build-sidecar.ps1](backend/build-sidecar.ps1) — produces `src-tauri/binaries/jarvis-core-<triple>.exe`.
+
+Dev workflow stays `npm run dev`. Production packaging: `npm run tauri:build`. The Rust shell uses `#[cfg(not(debug_assertions))]` to skip sidecar spawn in `npm run tauri:dev` (you launch the backend yourself).
+
 ## Dev Commands (Windows / PowerShell)
 
 All scripts run from repo root. `npm run sync-env` is auto-invoked by `dev`/`start`/`backend` and copies the root `.env` to `frontend\.env` and `backend\.env` via PowerShell `cp`.
@@ -14,6 +27,10 @@ All scripts run from repo root. `npm run sync-env` is auto-invoked by `dev`/`sta
 | `npm start` | Frontend only (`react-scripts start` on `:3000`). |
 | `npm run build` | React production build. |
 | `npm test` | `react-scripts test` (interactive watcher). |
+| `npm run sidecar:build` | PyInstaller → `src-tauri/binaries/jarvis-core-<triple>.exe`. |
+| `npm run tauri:dev` | Opens the Tauri webview against the running dev frontend (start backend yourself). |
+| `npm run tauri:build` | Builds sidecar + Tauri MSI/NSIS installer. Output under `src-tauri/target/release/bundle/`. |
+| `npm run tauri:icon` | Regenerate Tauri icon set from a source PNG. |
 
 Python venv lives at `backend\.venv\` (NOT `venv_jarvis`). Install Python deps via `backend\.venv\Scripts\pip.exe install -r backend\requirements.txt`. Exact-pinned versions are checked in at [backend/requirements.lock.txt](backend/requirements.lock.txt).
 
@@ -56,7 +73,10 @@ Telemetry frames emit every 5 s (`cpu`, `ram`, `status`); idle pong every 20 s d
 
 ## Architecture Map (one-liners)
 
-- [backend/main.py](backend/main.py) — FastAPI app, `/ws` endpoint, telemetry/keepalive loops, lifespan-managed singleton `JarvisProcessor`.
+- [src-tauri/](src-tauri/) — Rust + Tauri v2 desktop shell. Spawns the FastAPI sidecar in release mode, waits on `/health`, reveals the window. Dev mode skips sidecar spawn.
+- [backend/core/paths.py](backend/core/paths.py) — runtime path resolver. Source-relative in dev, `%APPDATA%\J.A.R.V.I.S\` when PyInstaller-frozen. All persistent dirs (`temp/`, `memory_db/`, `vault/`, `.sandbox_run/`) flow through here.
+- [backend/jarvis_core.spec](backend/jarvis_core.spec) + [backend/build-sidecar.ps1](backend/build-sidecar.ps1) — PyInstaller recipe + build script.
+- [backend/main.py](backend/main.py) — FastAPI app, `/ws` endpoint, telemetry/keepalive loops, lifespan-managed singleton `JarvisProcessor`. Layered `.env` discovery (frozen: next to exe → APPDATA → repo). Loopback-only bind (`127.0.0.1`) when frozen; `0.0.0.0` in dev.
 - [backend/core/processor.py](backend/core/processor.py) — orchestrator: memory lookup → Groq LLM stream → tool routing → TTS dispatch. `stream_llm` yields typed `{"kind": "token" | "event", ...}` dicts.
 - [backend/core/memory.py](backend/core/memory.py) — ChromaDB RAG layer with timestamped recall; persistent store at `backend/memory_db/`.
 - [backend/core/tool_registry.py](backend/core/tool_registry.py) — lazy-loaded tool manifest; new tools subclass `Tool` and self-register.
@@ -85,7 +105,7 @@ Telemetry frames emit every 5 s (`cpu`, `ram`, `status`); idle pong every 20 s d
 
 ## Environment Variables
 
-`GROQ_API_KEY` (required) · `ALLOWED_ORIGINS` (CSV, default `localhost:3000`) · `BACKEND_PORT` (default 8000) · `JARVIS_SANDBOX_ROOT` (default repo root) · `JARVIS_SANDBOX_BACKEND` (`docker` / `windows_jobobject` / `hardened` — auto-detected) · `JARVIS_SANDBOX_DOCKER_IMAGE` (default `alpine:3` / `mcr.microsoft.com/windows/nanoserver:ltsc2022`) · `REACT_APP_API_URL` (frontend WS/HTTP override).
+`GROQ_API_KEY` (required) · `ALLOWED_ORIGINS` (CSV, default `localhost:3000`) · `BACKEND_PORT` (default 8000) · `JARVIS_SANDBOX_ROOT` (default repo root) · `JARVIS_SANDBOX_BACKEND` (`docker` / `windows_jobobject` / `hardened` — auto-detected) · `JARVIS_SANDBOX_DOCKER_IMAGE` (default `alpine:3` / `mcr.microsoft.com/windows/nanoserver:ltsc2022`) · `REACT_APP_API_URL` (frontend WS/HTTP override) · `JARVIS_DATA_ROOT` (override persistence root — handy for portable installs and tests).
 
 ## Verification Before Shipping
 

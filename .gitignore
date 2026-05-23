@@ -56,6 +56,17 @@ vault/                  # NexusVault encrypted blobs — never check in
 *.log
 *.bak
 
+# Tauri / Cargo build output
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/jarvis-core*
+!src-tauri/binaries/README.md
+
+# PyInstaller artefacts
+backend/build/
+backend/dist/
+backend/*.spec.bak
+
 # IDE / OS
 .vscode/*
 !.vscode/settings.json.example
